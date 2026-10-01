@@ -52,6 +52,25 @@ services:
       - default
       - spooker-net
 
+  # Frontend (Vite) - mesma estrategia do orq-front: roda o proprio dev
+  # server em "producao" (ja e feito assim pro resto do spooker-platform),
+  # sem build/nginx estatico separado. O proxy /api do Vite fala com o
+  # container "api" pelo nome dentro do docker-compose.
+  front:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    environment:
+      API_PROXY_TARGET: http://api:3333
+    ports:
+      # So 127.0.0.1 - acessivel local (dev), nunca pelo IP publico da VPS.
+      - '127.0.0.1:5180:5180'
+    depends_on:
+      - api
+    networks:
+      - default
+
 networks:
   default:
   spooker-net:
