@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { autenticar } from '../auth.ts'
+import { autenticar, EQUIPE_ATENDIMENTO, exigirPapel } from '../auth.ts'
 import { prisma } from '../db.ts'
 import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
 
@@ -9,6 +9,7 @@ import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
 
 export default async function conversasRoutes(app: FastifyInstance) {
   app.addHook('onRequest', autenticar)
+  app.addHook('preHandler', exigirPapel(...EQUIPE_ATENDIMENTO))
 
   async function buscar(id: string, clinicaId: string) {
     const c = await prisma.conversa.findFirst({ where: { id, clinicaId } })

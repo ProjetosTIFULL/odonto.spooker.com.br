@@ -69,6 +69,10 @@ type Props<T> = {
   renderEvent?: (event: CalendarEvent<T>, info: { compact: boolean }) => ReactNode
   /** Conteúdo extra à direita da barra (filtros, botão "novo"). */
   toolbarExtra?: ReactNode
+  /** Linha logo abaixo da barra (ex.: legenda de cores) */
+  legend?: ReactNode
+  /** Período visível mudou (navegação ou troca de visão): use para buscar os eventos. `end` é exclusivo. */
+  onRangeChange?: (range: { start: Date; end: Date }) => void
 }
 
 const VIEW_LABEL: Record<CalendarView, string> = {
@@ -117,6 +121,8 @@ export default function EventCalendar<T>({
   onEventChange,
   renderEvent,
   toolbarExtra,
+  legend,
+  onRangeChange,
 }: Props<T>) {
   const [view, setView] = useState<CalendarView>(defaultView)
   const [date, setDate] = useState(() => startOfDay(defaultDate ?? new Date()))
@@ -159,6 +165,20 @@ export default function EventCalendar<T>({
     const ini = startOfWeek(date, weekStartsOn)
     return Array.from({ length: 7 }, (_, i) => addDays(ini, i)).filter((d) => !hiddenWeekdays.includes(d.getDay()))
   }, [date, weekStartsOn, hiddenWeekdays])
+
+  // Período visível (inclui os dias de fora do mês na grade mensal)
+  const rangeStart = (() => {
+    if (view === 'mes') return startOfWeek(new Date(date.getFullYear(), date.getMonth(), 1), weekStartsOn)
+    if (view === 'semana') return startOfWeek(date, weekStartsOn)
+    return date
+  })()
+  const rangeDays = view === 'mes' ? 42 : view === 'semana' ? 7 : view === 'lista' ? LISTA_DIAS : 1
+  const onRangeChangeRef = useRef(onRangeChange)
+  onRangeChangeRef.current = onRangeChange
+  useEffect(() => {
+    onRangeChangeRef.current?.({ start: rangeStart, end: addDays(rangeStart, rangeDays) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeStart.getTime(), rangeDays])
 
   const title = capitalize((() => {
     if (view === 'mes') return fmtMonthYear.format(date)
@@ -558,6 +578,7 @@ export default function EventCalendar<T>({
           {toolbarExtra}
         </div>
       </div>
+      {legend && <div className="ec-legend">{legend}</div>}
       {content}
     </div>
   )

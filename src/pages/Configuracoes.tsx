@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { Bell, Bot, Building2, Clock, CreditCard, MessageCircle, ShieldCheck, Stethoscope, Users } from 'lucide-react'
-import { Avatar, Card, Placeholder } from '../components/ui'
+import { Card, Placeholder } from '../components/ui'
 import SyncMcpButton from '../components/SyncMcpButton'
-import { procedimentos, profissionais } from '../data/mock'
+import { procedimentos } from '../data/mock'
+import Colaboradores from './config/Colaboradores'
 import McpAgente from './config/McpAgente'
+import Usuarios from './config/Usuarios'
 
 const SECOES = [
   { id: 'clinica', label: 'Dados da clínica', icon: Building2 },
-  { id: 'profissionais', label: 'Profissionais', icon: Stethoscope },
+  { id: 'profissionais', label: 'Profissionais e colaboradores', icon: Stethoscope },
   { id: 'horarios', label: 'Horários de atendimento', icon: Clock },
   { id: 'procedimentos', label: 'Procedimentos e preços', icon: CreditCard },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
@@ -59,22 +61,8 @@ function render(secao: SecaoId) {
         </Card>
       )
     case 'profissionais':
-      return (
-        <Card title="Profissionais" action={<button className="btn btn-primary btn-sm">Adicionar</button>}>
-          <ul className="list">
-            {profissionais.map((p) => (
-              <li key={p.id} className="list-row">
-                <Avatar nome={p.nome} cor={p.cor} />
-                <div className="grow">
-                  <strong>{p.nome}</strong>
-                  <small>{p.especialidade}</small>
-                </div>
-                <button className="btn btn-ghost btn-sm">Editar</button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )
+      return <Colaboradores />
+
     case 'horarios':
       return (
         <Card title="Horários de atendimento" action={<SyncMcpButton recurso="horários de atendimento" />}>
@@ -158,16 +146,7 @@ function render(secao: SecaoId) {
         </Card>
       )
     case 'usuarios':
-      return (
-        <Card title="Usuários e permissões">
-          <Placeholder items={[
-            'Perfis: Administrador, Dentista, Recepção',
-            'Convite por e-mail',
-            'Controle de acesso por módulo',
-            'Registro de atividades (auditoria / LGPD)',
-          ]} />
-        </Card>
-      )
+      return <Usuarios />
     case 'plano':
       return (
         <Card title="Plano e assinatura">

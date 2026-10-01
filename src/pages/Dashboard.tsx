@@ -1,111 +1,63 @@
-import { Link } from 'react-router-dom'
-import { CalendarCheck, CalendarDays, Cake, DollarSign, MessageCircle, UserPlus, UserX } from 'lucide-react'
-import { Avatar, Card, StatusBadge } from '../components/ui'
-import { consultas, conversas, getPaciente, getProfissional, hoje, pacientes } from '../data/mock'
+import { useState } from 'react'
+import { Award, ClipboardList, LineChart } from 'lucide-react'
+import { useUsuario } from '../auth/AuthContext'
+import Desempenho from './dashboard/Desempenho'
+import Financeiro from './dashboard/Financeiro'
+import Rotina from './dashboard/Rotina'
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+type Aba = 'financeiro' | 'rotina' | 'desempenho'
 
+const OPCOES: { id: Aba; titulo: string; descricao: string; icon: typeof LineChart }[] = [
+  { id: 'financeiro', titulo: 'Financeiro', descricao: 'Faturamento, previsão do mês, ticket médio, faltas e rankings.', icon: LineChart },
+  { id: 'rotina', titulo: 'Rotina', descricao: 'Agenda de hoje, pendências, confirmações e aniversariantes.', icon: ClipboardList },
+  { id: 'desempenho', titulo: 'Desempenho', descricao: 'Atendimentos por dentista, comparecimento, notas pós-consulta e comentários.', icon: Award },
+]
+
+/**
+ * Admin escolhe primeiro entre Financeiro, Rotina e Desempenho (os gráficos só aparecem depois da escolha).
+ * Secretário/operador só tem a Rotina: abre direto nela (a API também bloqueia o financeiro).
+ */
 export default function Dashboard() {
-  const doDia = consultas.filter((c) => c.data === hoje).sort((a, b) => a.inicio.localeCompare(b.inicio))
-  const confirmadas = doDia.filter((c) => ['confirmada', 'em_atendimento', 'concluida'].includes(c.status)).length
-  const faltas = doDia.filter((c) => c.status === 'faltou').length
-  const naoLidas = conversas.reduce((s, c) => s + c.naoLidas, 0)
+  const usuario = useUsuario()
+  const ehAdmin = usuario.papel === 'ADMIN'
+  const [aba, setAba] = useState<Aba | null>(ehAdmin ? null : 'rotina')
 
-  const mesAtual = hoje.slice(5, 7)
-  const aniversariantes = pacientes.filter((p) => p.nascimento.slice(5, 7) === mesAtual)
+  if (!ehAdmin) {
+    return (
+      <div className="page">
+        <Rotina />
+      </div>
+    )
+  }
 
-  const kpis = [
-    { label: 'Consultas hoje', value: doDia.length, hint: `${confirmadas} confirmadas`, icon: CalendarDays, tone: 'teal' },
-    { label: 'Taxa de confirmação', value: `${Math.round((confirmadas / Math.max(doDia.length, 1)) * 100)}%`, hint: `${faltas} falta(s) hoje`, icon: CalendarCheck, tone: 'green' },
-    { label: 'Faturamento do mês', value: brl(38450), hint: '+12% vs. mês anterior', icon: DollarSign, tone: 'purple' },
-    { label: 'Novos pacientes', value: 14, hint: 'no mês', icon: UserPlus, tone: 'orange' },
-  ]
+  if (!aba) {
+    return (
+      <div className="page">
+        <div className="dash-escolha">
+          {OPCOES.map(({ id, titulo, descricao, icon: Icon }) => (
+            <button key={id} className="dash-opcao card" onClick={() => setAba(id)}>
+              <span className="dash-opcao-icone"><Icon size={28} /></span>
+              <strong>{titulo}</strong>
+              <small>{descricao}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page">
-      <div className="kpi-grid">
-        {kpis.map(({ label, value, hint, icon: Icon, tone }) => (
-          <div key={label} className="kpi">
-            <div className={`kpi-icon tone-${tone}`}>
-              <Icon size={20} />
-            </div>
-            <div>
-              <span className="kpi-label">{label}</span>
-              <strong className="kpi-value">{value}</strong>
-              <span className="kpi-hint">{hint}</span>
-            </div>
-          </div>
+      <div className="segmented dash-abas" role="tablist" aria-label="Visão do dashboard">
+        {OPCOES.map(({ id, titulo }) => (
+          <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? 'active' : ''} onClick={() => setAba(id)}>
+            {titulo}
+          </button>
         ))}
       </div>
-
-      <div className="grid-2-1">
-        <Card title="Agenda de hoje" action={<Link to="/agenda" className="link">Ver agenda</Link>}>
-          <ul className="list">
-            {doDia.map((c) => {
-              const pac = getPaciente(c.pacienteId)!
-              const prof = getProfissional(c.profissionalId)
-              return (
-                <li key={c.id} className="list-row">
-                  <span className="time">{c.inicio}</span>
-                  <span className="prof-bar" style={{ background: prof.cor }} />
-                  <div className="grow">
-                    <strong>{pac.nome}</strong>
-                    <small>{c.procedimento} · {prof.nome}</small>
-                  </div>
-                  <StatusBadge status={c.status} />
-                </li>
-              )
-            })}
-          </ul>
-        </Card>
-
-        <div className="stack">
-          <Card title="WhatsApp" action={<Link to="/chat" className="link">Abrir chat</Link>}>
-            <p className="muted small">
-              <MessageCircle size={14} className="inline-icon" /> {naoLidas} mensagens não lidas
-            </p>
-            <ul className="list">
-              {conversas.filter((c) => c.naoLidas > 0).map((c) => (
-                <li key={c.id} className="list-row">
-                  <Avatar nome={c.nome} />
-                  <div className="grow ellipsis">
-                    <strong>{c.nome}</strong>
-                    <small>{c.ultimaMensagem}</small>
-                  </div>
-                  <span className="count">{c.naoLidas}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card title="Aniversariantes do mês">
-            <ul className="list">
-              {aniversariantes.map((p) => (
-                <li key={p.id} className="list-row">
-                  <Cake size={18} className="muted" />
-                  <div className="grow">
-                    <strong>{p.nome}</strong>
-                    <small>{p.nascimento.slice(8, 10)}/{p.nascimento.slice(5, 7)}</small>
-                  </div>
-                  <button className="btn btn-ghost btn-sm">Enviar parabéns</button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card title="Atenção">
-            <ul className="list">
-              <li className="list-row">
-                <UserX size={18} className="text-danger" />
-                <div className="grow">
-                  <strong>{pacientes.filter((p) => p.status === 'inativo').length} paciente(s) sem retorno há +6 meses</strong>
-                  <small>Sugestão: campanha de retorno via WhatsApp</small>
-                </div>
-              </li>
-            </ul>
-          </Card>
-        </div>
-      </div>
+      {aba === 'financeiro' && <Financeiro />}
+      {aba === 'rotina' && <Rotina />}
+      {aba === 'desempenho' && <Desempenho />}
     </div>
   )
 }

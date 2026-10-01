@@ -24,8 +24,21 @@ npm install
 npm run dev                 # http://localhost:5180 (proxy /api -> 3333)
 ```
 
-Login de demonstração: `admin@demo.com` / `demo1234`
-(também `ana@demo.com` — dentista — e `recepcao@demo.com` — recepção, mesma senha).
+Logins de demonstração (senha `demo1234`):
+
+| E-mail | Perfil | Acessa |
+|---|---|---|
+| `admin@demo.com` | Administrador | Tudo, inclusive Configurações |
+| `recepcao@demo.com` | Secretário(a) / Operador | Dashboard, Agenda, Chat e Clientes |
+| `ana@demo.com` | Dentista / Médico | Somente a Agenda |
+
+## Perfis e colaboradores
+
+- **Profissionais e colaboradores** (Configurações): todas as pessoas da clínica, com função
+  *Dentista / Médico* (aparece como coluna na agenda e recebe consultas) ou *Secretário(a) / Operador*.
+- **Usuários e permissões** (Configurações): login (e-mail + senha), perfil de acesso e vínculo com o colaborador.
+- A API aplica a mesma matriz (`server/src/auth.ts`) e lê o perfil do banco a cada requisição:
+  mudar o perfil ou desativar um usuário vale na hora, mesmo com sessão aberta.
 
 ## API
 
@@ -40,8 +53,8 @@ Datas trafegam em ISO 8601 (UTC); filtros por dia usam `YYYY-MM-DD` no horário 
 | GET | `/api/auth/me` | Usuário logado + clínica |
 | GET/PUT | `/api/clinica` | Dados da clínica (PUT: ADMIN) |
 | GET/PUT | `/api/clinica/horarios` | Horário de atendimento por dia da semana (PUT: ADMIN) |
-| GET/POST/PUT | `/api/usuarios` | Usuários da clínica (somente ADMIN) |
-| GET/POST/PUT/DELETE | `/api/profissionais` | DELETE apenas desativa |
+| GET/POST/PUT | `/api/usuarios` | Logins da clínica, perfil e vínculo com colaborador (somente ADMIN) |
+| GET/POST/PUT/DELETE | `/api/profissionais?funcao=DENTISTA` | Colaboradores (dentistas e secretários). DELETE apenas desativa |
 | GET/POST/PUT/DELETE | `/api/procedimentos` | Nome, TUSS, duração, valor. DELETE apenas desativa |
 | GET | `/api/pacientes?busca=&status=&pagina=&porPagina=` | Lista com última visita e próxima consulta |
 | GET/POST/PUT/DELETE | `/api/pacientes/:id` | GET traz o histórico de consultas |

@@ -16,3 +16,7 @@ export function hojeISO() {
 export const emHorario = (data: string, hhmm: string) => new Date(`${data}T${hhmm}:00${OFFSET}`)
 
 export const horaValida = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** "01/10 14:00" no horário de Brasília (para mensagens de erro). */
+export const fmtDataHora = (d: Date) =>
+  new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d)

@@ -54,7 +54,7 @@ export default async function authRoutes(app: FastifyInstance) {
       // Dentista autônomo: o próprio usuário já é o profissional da agenda
       if (clinica.tipo === 'AUTONOMO') {
         await tx.profissional.create({
-          data: { clinicaId: c.id, usuarioId: u.id, nome: usuario.nome, cro: usuario.cro },
+          data: { clinicaId: c.id, usuarioId: u.id, nome: usuario.nome, cro: usuario.cro, funcao: 'DENTISTA', email: usuario.email },
         })
       }
       return u
@@ -77,7 +77,11 @@ export default async function authRoutes(app: FastifyInstance) {
   app.get('/me', { onRequest: autenticar }, async (req) => {
     const u = await prisma.usuario.findUnique({
       where: { id: req.user.sub },
-      select: { ...usuarioPublico, clinica: { select: { id: true, nome: true, tipo: true } } },
+      select: {
+        ...usuarioPublico,
+        clinica: { select: { id: true, nome: true, tipo: true } },
+        profissional: { select: { id: true, nome: true, funcao: true } },
+      },
     })
     if (!u) throw new HttpError(401, 'Usuário não encontrado')
     return u

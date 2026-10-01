@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { autenticar, exigirPapel } from '../auth.ts'
+import { autenticar, EQUIPE_ATENDIMENTO, exigirPapel } from '../auth.ts'
 import { prisma } from '../db.ts'
 import type { Prisma } from '../generated/prisma/client.ts'
 import { HttpError, idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
@@ -99,7 +99,7 @@ export default async function pacientesRoutes(app: FastifyInstance) {
     return p
   })
 
-  app.post('/', async (req, reply) => {
+  app.post('/', { preHandler: exigirPapel(...EQUIPE_ATENDIMENTO) }, async (req, reply) => {
     const data = body.parse(req.body)
     const clinicaId = req.user.clinicaId
     if (await prisma.paciente.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone: data.telefone } } })) {
@@ -111,7 +111,7 @@ export default async function pacientesRoutes(app: FastifyInstance) {
     return reply.code(201).send(criado)
   })
 
-  app.put('/:id', async (req) => {
+  app.put('/:id', { preHandler: exigirPapel(...EQUIPE_ATENDIMENTO) }, async (req) => {
     const { id } = idParams.parse(req.params)
     const { count } = await prisma.paciente.updateMany({
       where: { id, clinicaId: req.user.clinicaId },

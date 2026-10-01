@@ -1,6 +1,6 @@
 // Dados de exemplo — serão substituídos pela API.
 
-export type StatusConsulta = 'agendada' | 'confirmada' | 'em_atendimento' | 'concluida' | 'faltou' | 'cancelada'
+export type StatusConsulta = 'agendada' | 'confirmada' | 'em_atendimento' | 'concluida' | 'faltou' | 'cancelada' | 'remarcada'
 
 export type Profissional = { id: string; nome: string; especialidade: string; cor: string }
 
@@ -119,6 +119,7 @@ export const statusLabel: Record<StatusConsulta, string> = {
   concluida: 'Concluída',
   faltou: 'Faltou',
   cancelada: 'Cancelada',
+  remarcada: 'Remarcada',
 }
 
 export const getPaciente = (id: string | null) => pacientes.find((p) => p.id === id)

@@ -1,5 +1,6 @@
 // Dados de demonstração: npm run db:seed
-// Login: admin@demo.com / demo1234
+// Logins (senha demo1234): admin@demo.com (administrador), recepcao@demo.com (secretária/operadora),
+// ana@demo.com (dentista: só agenda)
 import bcrypt from 'bcryptjs'
 import { prisma } from '../src/db.ts'
 import { addDias, emHorario, hojeISO, inicioDoDia } from '../src/lib/tempo.ts'
@@ -30,10 +31,10 @@ async function main() {
   const clinicaId = clinica.id
 
   const senhaHash = await bcrypt.hash('demo1234', 10)
-  const [admin, ana] = await Promise.all([
+  const [admin, ana, recepcao] = await Promise.all([
     prisma.usuario.create({ data: { clinicaId, nome: 'Administrador', email: EMAIL, senhaHash, papel: 'ADMIN' } }),
     prisma.usuario.create({ data: { clinicaId, nome: 'Ana Souza', email: 'ana@demo.com', senhaHash, papel: 'DENTISTA' } }),
-    prisma.usuario.create({ data: { clinicaId, nome: 'Recepção', email: 'recepcao@demo.com', senhaHash, papel: 'RECEPCAO' } }),
+    prisma.usuario.create({ data: { clinicaId, nome: 'Paula Ribeiro', email: 'recepcao@demo.com', senhaHash, papel: 'OPERADOR' } }),
   ])
 
   const [p1, p2, p3] = await Promise.all([
@@ -41,6 +42,13 @@ async function main() {
     prisma.profissional.create({ data: { clinicaId, nome: 'Dr. Bruno Lima', especialidade: 'Ortodontia', cor: '#7c4dff' } }),
     prisma.profissional.create({ data: { clinicaId, nome: 'Dra. Carla Mendes', especialidade: 'Endodontia', cor: '#e8710a' } }),
   ])
+  // Colaboradores que não atendem: não aparecem na agenda
+  await prisma.profissional.createMany({
+    data: [
+      { clinicaId, usuarioId: recepcao.id, nome: 'Paula Ribeiro', funcao: 'SECRETARIO', telefone: '(51) 99111-2233', email: 'recepcao@demo.com' },
+      { clinicaId, nome: 'Marcos Teixeira', funcao: 'SECRETARIO', telefone: '(51) 99444-5566' },
+    ],
+  })
 
   const procs = Object.fromEntries(
     await Promise.all(
@@ -74,7 +82,8 @@ async function main() {
   const beatriz = await pac('Beatriz Rocha', '5551996541122', 'Particular', '2010-04-18')
   const gustavo = await pac('Gustavo Nunes', '5551987779900', 'OdontoPrev', '1988-01-09', 'EM_TRATAMENTO')
 
-  const c = (pacienteId: string, profissionalId: string, proc: keyof typeof procs, d: number, inicio: string, status: 'AGENDADA' | 'CONFIRMADA' | 'EM_ATENDIMENTO' | 'CONCLUIDA' | 'FALTOU' = 'AGENDADA') => {
+  type StatusSeed = 'AGENDADA' | 'CONFIRMADA' | 'EM_ATENDIMENTO' | 'CONCLUIDA' | 'FALTOU' | 'CANCELADA'
+  const c = (pacienteId: string, profissionalId: string, proc: keyof typeof procs, d: number, inicio: string, status: StatusSeed = 'AGENDADA') => {
     const p = procs[proc]
     const ini = em(d, inicio)
     return { clinicaId, pacienteId, profissionalId, procedimentoId: p.id, inicio: ini, fim: new Date(ini.getTime() + p.duracaoMin * 60_000), valor: p.valor, status }
@@ -106,6 +115,83 @@ async function main() {
     ],
   })
 
+  // Movimento gerado (dashboard financeiro, histórico de pacientes): ~6 meses para trás e 3 semanas para frente.
+  // Só nos horários 11h, 16h, 17h e 18h, que não cruzam as consultas fixas acima. Sementes fixas: o seed é reproduzível.
+  let semente = 42
+  const rand = () => {
+    semente = (semente * 1103515245 + 12345) % 2147483648
+    return semente / 2147483648
+  }
+  const escolher = <X,>(xs: readonly X[]) => xs[Math.floor(rand() * xs.length)]
+  const procsPorDentista: Record<string, (keyof typeof procs)[]> = {
+    [p1.id]: ['limpeza', 'restauracao', 'avaliacao', 'fluor', 'extracao', 'clareamento'],
+    [p2.id]: ['manutencao', 'manutencao', 'avaliacao'],
+    [p3.id]: ['avaliacao', 'restauracao', 'canal'],
+  }
+  // Ricardo fica de fora: é o exemplo de paciente sem retorno
+  const pacientesGerados = [mariana, joao, fernanda, luisa, paulo, beatriz, gustavo]
+  const gerados: ReturnType<typeof c>[] = []
+  for (let d = -182; d <= 21; d++) {
+    if (d === 0) continue
+    const diaSemana = em(d, '12:00').getUTCDay()
+    if (diaSemana === 0) continue
+    const horas = diaSemana === 6 ? ['11:00'] : ['11:00', '16:00', '17:00', '18:00']
+    for (const prof of [p1, p2, p3]) {
+      for (const hora of horas) {
+        if (rand() > (d < 0 ? 0.45 : 0.3)) continue
+        let proc = escolher(procsPorDentista[prof.id])
+        if (procs[proc].duracaoMin > 60 && hora !== '18:00') proc = 'avaliacao' // canal (90 min) só no último horário
+        const r = rand()
+        const status: StatusSeed = d < 0 ? (r < 0.08 ? 'FALTOU' : r < 0.12 ? 'CANCELADA' : 'CONCLUIDA') : d <= 2 && r < 0.5 ? 'CONFIRMADA' : 'AGENDADA'
+        gerados.push(c(escolher(pacientesGerados).id, prof.id, proc, d, hora, status))
+      }
+    }
+  }
+  await prisma.consulta.createMany({ data: gerados })
+
+
+  // Avaliações pós-consulta: ~60% das consultas realizadas, com leve diferença entre dentistas
+  const vies: Record<string, number> = { [p1.id]: 0.12, [p2.id]: -0.1, [p3.id]: 0 }
+  const COMENTARIOS: Record<number, string[]> = {
+    5: [
+      'Atendimento excelente, recomendo!',
+      'Muito cuidado e atenção, não senti nada.',
+      'Explicou todo o tratamento com calma.',
+      'Pontualidade e simpatia, nota 10.',
+      'Consultório impecável e equipe ótima.',
+    ],
+    4: ['Bom atendimento, só atrasou um pouco.', 'Gostei, voltarei.', 'Tudo certo, recepção poderia ser mais ágil.'],
+    3: ['Esperei bastante na recepção.', 'Atendimento ok, mas achei o valor alto.'],
+    2: ['Atrasou 40 minutos e ninguém avisou.', 'Senti dor e não fui avisado antes do procedimento.'],
+    1: ['Fui mal atendido na recepção e o horário não foi respeitado.'],
+  }
+  const realizadas = await prisma.consulta.findMany({
+    where: { clinicaId, status: 'CONCLUIDA' },
+    select: { id: true, profissionalId: true, fim: true },
+    orderBy: { inicio: 'asc' },
+  })
+  const avaliacoes = realizadas
+    .filter(() => rand() < 0.6)
+    .map((c) => {
+      const r = rand() + (vies[c.profissionalId] ?? 0)
+      const nota = r > 0.45 ? 5 : r > 0.18 ? 4 : r > 0.07 ? 3 : r > 0.02 ? 2 : 1
+      return {
+        clinicaId,
+        consultaId: c.id,
+        nota,
+        comentario: rand() < 0.5 || nota <= 2 ? escolher(COMENTARIOS[nota]) : null,
+        criadoEm: new Date(c.fim.getTime() + 3 * 3_600_000),
+      }
+    })
+  await prisma.avaliacao.createMany({ data: avaliacoes })
+  console.log(`Avaliações geradas: ${avaliacoes.length}`)
+
+  // Cadastro antigo para a maioria; Paulo e Beatriz contam como novos no mês
+  await prisma.paciente.updateMany({
+    where: { clinicaId, id: { notIn: [paulo.id, beatriz.id] } },
+    data: { criadoEm: em(-240, '09:00') },
+  })
+
   const agora = new Date()
   const minAtras = (m: number) => new Date(agora.getTime() - m * 60_000)
   const conversa = (telefone: string, pacienteId: string | null, nomeContato: string | null, naoLidas: number, msgs: [de: 'PACIENTE' | 'CLINICA', texto: string, minutos: number][]) =>
@@ -134,6 +220,7 @@ async function main() {
     ['PACIENTE', 'Perfeito, até lá!', 60 * 47],
   ])
 
+  console.log(`Consultas geradas: ${gerados.length}`)
   console.log(`Seed concluído. Clínica ${clinica.nome} — login: ${admin.email} / demo1234`)
 }
 

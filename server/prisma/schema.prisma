@@ -14,10 +14,18 @@ enum TipoConta {
   AUTONOMO
 }
 
+/// Perfil de acesso do usuário
+/// ADMIN: tudo · OPERADOR (secretário/operador): tudo menos Configurações · DENTISTA (dentista/médico): só Agenda
 enum Papel {
   ADMIN
   DENTISTA
-  RECEPCAO
+  OPERADOR
+}
+
+/// Função do colaborador na clínica (só DENTISTA aparece como coluna na agenda)
+enum FuncaoColaborador {
+  DENTISTA
+  SECRETARIO
 }
 
 enum StatusPaciente {
@@ -33,6 +41,8 @@ enum StatusConsulta {
   CONCLUIDA
   FALTOU
   CANCELADA
+  /// Não aconteceu porque foi remarcada: a nova consulta é outro registro
+  REMARCADA
 }
 
 enum Remetente {
@@ -58,6 +68,7 @@ model Clinica {
   consultas     Consulta[]
   horarios      HorarioAtendimento[]
   conversas     Conversa[]
+  avaliacoes    Avaliacao[]
 }
 
 model Usuario {
@@ -66,7 +77,7 @@ model Usuario {
   nome      String
   email     String   @unique
   senhaHash String
-  papel     Papel    @default(RECEPCAO)
+  papel     Papel    @default(OPERADOR)
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
 
@@ -76,15 +87,19 @@ model Usuario {
   @@index([clinicaId])
 }
 
+/// Colaborador da clínica: dentistas e secretários/operadores
 model Profissional {
-  id            String  @id @default(uuid())
+  id            String            @id @default(uuid())
   clinicaId     String
-  usuarioId     String? @unique
+  usuarioId     String?           @unique
   nome          String
+  funcao        FuncaoColaborador @default(DENTISTA)
   especialidade String?
   cro           String?
-  cor           String  @default("#0e7c86")
-  ativo         Boolean @default(true)
+  telefone      String?
+  email         String?
+  cor           String            @default("#0e7c86")
+  ativo         Boolean           @default(true)
 
   clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   usuario   Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
@@ -148,6 +163,7 @@ model Consulta {
   paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
   profissional Profissional  @relation(fields: [profissionalId], references: [id])
   procedimento Procedimento? @relation(fields: [procedimentoId], references: [id], onDelete: SetNull)
+  avaliacao    Avaliacao?
 
   @@index([clinicaId, inicio])
   @@index([profissionalId, inicio])
@@ -193,4 +209,19 @@ model Mensagem {
   conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
 
   @@index([conversaId, enviadaEm])
+}
+
+/// Nota pós-consulta (1 a 5) dada pelo paciente. Uma por consulta concluída.
+model Avaliacao {
+  id         String   @id @default(uuid())
+  clinicaId  String
+  consultaId String   @unique
+  nota       Int
+  comentario String?
+  criadoEm   DateTime @default(now())
+
+  clinica  Clinica  @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  consulta Consulta @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+
+  @@index([clinicaId, criadoEm])
 }
