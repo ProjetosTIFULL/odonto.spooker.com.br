@@ -1,7 +1,19 @@
-import { useState } from 'react'
-import { CalendarPlus, Paperclip, Search, Send, UserPlus, Zap } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Paperclip, Search, Send, Zap } from 'lucide-react'
 import { Avatar } from '../components/ui'
-import { conversas as mockConversas, getPaciente, type Conversa } from '../data/mock'
+import { api } from '../lib/api'
+
+type Mensagem = { id: string; de: 'PACIENTE' | 'CLINICA'; texto: string; enviadaEm: string }
+type ConversaResumo = {
+  id: string
+  telefone: string
+  nomeContato: string | null
+  naoLidas: number
+  ultimaMensagemEm: string
+  paciente: { id: string; nome: string; convenio: string | null } | null
+  ultimaMensagem: Mensagem | null
+}
+type ConversaDetalhe = ConversaResumo & { mensagens: Mensagem[] }
 
 const RESPOSTAS_RAPIDAS = [
   'Olá! Como podemos ajudar?',
@@ -10,34 +22,60 @@ const RESPOSTAS_RAPIDAS = [
   'Posso te enviar os horários disponíveis para agendamento?',
 ]
 
+const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+const nomeDaConversa = (c: ConversaResumo) => c.paciente?.nome || c.nomeContato || c.telefone
+
 export default function Chat() {
-  const [conversas, setConversas] = useState<Conversa[]>(mockConversas)
-  const [ativaId, setAtivaId] = useState(conversas[0].id)
+  const [conversas, setConversas] = useState<ConversaResumo[]>([])
+  const [ativaId, setAtivaId] = useState<string | null>(null)
+  const [ativa, setAtiva] = useState<ConversaDetalhe | null>(null)
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
   const [mostrarRapidas, setMostrarRapidas] = useState(false)
+  const intervaloLista = useRef<ReturnType<typeof setInterval>>(undefined)
 
-  const ativa = conversas.find((c) => c.id === ativaId)!
-  const paciente = getPaciente(ativa.pacienteId)
-  const filtradas = conversas.filter((c) => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca))
-
-  const abrir = (id: string) => {
-    setAtivaId(id)
-    setConversas((cs) => cs.map((c) => (c.id === id ? { ...c, naoLidas: 0 } : c)))
+  const carregarLista = () => {
+    api<ConversaResumo[]>('/conversas').then((cs) => {
+      setConversas(cs)
+      setAtivaId((id) => id ?? cs[0]?.id ?? null)
+    })
   }
 
+  useEffect(() => {
+    carregarLista()
+    intervaloLista.current = setInterval(carregarLista, 5000) // pega mensagem nova chegando pelo WhatsApp
+    return () => clearInterval(intervaloLista.current)
+  }, [])
+
+  useEffect(() => {
+    if (!ativaId) return
+    api<ConversaDetalhe>(`/conversas/${ativaId}`).then(setAtiva)
+  }, [ativaId])
+
+  const abrir = (id: string) => setAtivaId(id)
+
   const enviar = (msg = texto) => {
-    if (!msg.trim()) return
-    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    setConversas((cs) =>
-      cs.map((c) =>
-        c.id === ativaId
-          ? { ...c, ultimaMensagem: msg, hora, mensagens: [...c.mensagens, { de: 'clinica', texto: msg, hora }] }
-          : c,
-      ),
-    )
+    if (!msg.trim() || !ativaId) return
+    api<Mensagem>(`/conversas/${ativaId}/mensagens`, { method: 'POST', body: { texto: msg } }).then((m) => {
+      setAtiva((a) => (a ? { ...a, mensagens: [...a.mensagens, m] } : a))
+      carregarLista()
+    })
     setTexto('')
     setMostrarRapidas(false)
+  }
+
+  const filtradas = conversas.filter(
+    (c) => nomeDaConversa(c).toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca),
+  )
+
+  if (!ativa) {
+    return (
+      <div className="chat card">
+        <p className="muted" style={{ padding: 24 }}>
+          {conversas.length === 0 ? 'Nenhuma conversa ainda — assim que o WhatsApp receber uma mensagem, ela aparece aqui.' : 'Carregando...'}
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -50,14 +88,14 @@ export default function Chat() {
         <ul>
           {filtradas.map((c) => (
             <li key={c.id} className={`chat-item ${c.id === ativaId ? 'active' : ''}`} onClick={() => abrir(c.id)}>
-              <Avatar nome={c.nome.startsWith('+') ? '?' : c.nome} />
+              <Avatar nome={nomeDaConversa(c)} />
               <div className="grow ellipsis">
                 <div className="row-between">
-                  <strong>{c.nome}</strong>
-                  <small className="muted">{c.hora}</small>
+                  <strong>{nomeDaConversa(c)}</strong>
+                  <small className="muted">{c.ultimaMensagem && fmtHora(c.ultimaMensagem.enviadaEm)}</small>
                 </div>
                 <div className="row-between">
-                  <small className="ellipsis">{c.ultimaMensagem}</small>
+                  <small className="ellipsis">{c.ultimaMensagem?.texto}</small>
                   {c.naoLidas > 0 && <span className="count">{c.naoLidas}</span>}
                 </div>
               </div>
@@ -68,20 +106,18 @@ export default function Chat() {
 
       <section className="chat-main">
         <header className="chat-header">
-          <Avatar nome={ativa.nome.startsWith('+') ? '?' : ativa.nome} />
+          <Avatar nome={nomeDaConversa(ativa)} />
           <div className="grow">
-            <strong>{ativa.nome}</strong>
-            <small className="muted">{paciente ? `Paciente · ${paciente.convenio}` : 'Contato não cadastrado'}</small>
+            <strong>{nomeDaConversa(ativa)}</strong>
+            <small className="muted">{ativa.paciente ? `Paciente · ${ativa.paciente.convenio ?? 'particular'}` : 'Contato não cadastrado'}</small>
           </div>
-          {!paciente && <button className="btn btn-ghost btn-sm"><UserPlus size={16} /> Cadastrar</button>}
-          <button className="btn btn-ghost btn-sm"><CalendarPlus size={16} /> Agendar</button>
         </header>
 
         <div className="chat-messages">
-          {ativa.mensagens.map((m, i) => (
-            <div key={i} className={`bubble ${m.de === 'clinica' ? 'out' : 'in'}`}>
+          {ativa.mensagens.map((m) => (
+            <div key={m.id} className={`bubble ${m.de === 'CLINICA' ? 'out' : 'in'}`}>
               {m.texto}
-              <small>{m.hora}</small>
+              <small>{fmtHora(m.enviadaEm)}</small>
             </div>
           ))}
         </div>

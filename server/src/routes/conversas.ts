@@ -2,10 +2,30 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { autenticar, EQUIPE_ATENDIMENTO, exigirPapel } from '../auth.ts'
 import { prisma } from '../db.ts'
+import { env } from '../env.ts'
 import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
 
-// Por enquanto as mensagens só são gravadas no banco.
-// O envio/recebimento real pelo WhatsApp entra quando a integração for definida.
+// O recebimento (mensagem do paciente) chega pelo Orquestrador, que
+// espelha aqui via POST /mensagens/registrar no MCP (ver server/src/mcp/
+// server.ts). O envio manual (resposta digitada pelo atendente) sai de
+// verdade pelo WhatsApp chamando o api-gateway do Orquestrador direto -
+// best-effort: se falhar, a mensagem fica salva aqui mas nao conseguiu
+// sair, e avisamos o atendente.
+async function enviarPeloWhatsApp(clinicaId: string, telefone: string, texto: string): Promise<string | null> {
+  const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
+  if (!clinica?.agentId) return 'Esta clínica ainda não tem um agente de WhatsApp vinculado.'
+  try {
+    const r = await fetch(`${env.GATEWAY_URL}/orquestrador/enviar_mensagem_direta`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agent_id: clinica.agentId, numero_whatsapp: telefone, texto }),
+    })
+    const data = (await r.json()) as { erro?: string }
+    return data.erro ?? null
+  } catch {
+    return 'Não foi possível falar com o WhatsApp agora.'
+  }
+}
 
 export default async function conversasRoutes(app: FastifyInstance) {
   app.addHook('onRequest', autenticar)
@@ -72,12 +92,16 @@ export default async function conversasRoutes(app: FastifyInstance) {
   app.post('/:id/mensagens', async (req, reply) => {
     const { id } = idParams.parse(req.params)
     const { texto } = z.object({ texto: z.string().trim().min(1).max(4096) }).parse(req.body)
-    await buscar(id, req.user.clinicaId)
+    const clinicaId = req.user.clinicaId
+    const conversa = await buscar(id, clinicaId)
+
+    const erroEnvio = await enviarPeloWhatsApp(clinicaId, conversa.telefone, texto)
+
     const [mensagem] = await prisma.$transaction([
       prisma.mensagem.create({ data: { conversaId: id, de: 'CLINICA', texto } }),
       prisma.conversa.update({ where: { id }, data: { ultimaMensagemEm: new Date() } }),
     ])
-    return reply.code(201).send(mensagem)
+    return reply.code(201).send({ ...mensagem, avisoEnvio: erroEnvio })
   })
 
   /** Liga a conversa a um paciente já cadastrado. */

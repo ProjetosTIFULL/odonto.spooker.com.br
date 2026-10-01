@@ -14,6 +14,7 @@ import pacientesRoutes from './routes/pacientes.ts'
 import procedimentosRoutes from './routes/procedimentos.ts'
 import profissionaisRoutes from './routes/profissionais.ts'
 import usuariosRoutes from './routes/usuarios.ts'
+import whatsappRoutes from './routes/whatsapp.ts'
 
 z.config(z.locales.pt())
 
@@ -71,6 +72,7 @@ export async function buildApp() {
   await app.register(consultasRoutes, { prefix: '/api/consultas' })
   await app.register(conversasRoutes, { prefix: '/api/conversas' })
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' })
+  await app.register(whatsappRoutes, { prefix: '/api/whatsapp' })
 
   return app
 }

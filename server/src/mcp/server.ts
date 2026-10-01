@@ -7,8 +7,11 @@ import express from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
+import { prisma } from '../db.ts'
 import { env } from '../env.ts'
+import { normalizarTelefone } from '../lib/http.ts'
 import * as tools from './tools.ts'
+import { ErroFerramenta, resolverClinicaId } from './tools.ts'
 
 function resultadoJson(valor: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(valor) }] }
@@ -73,6 +76,47 @@ app.use(express.json())
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+/**
+ * Espelha uma mensagem (de qualquer lado) na tela de Chat do Portal -
+ * chamado pelo Orquestrador (spooker-platform) depois de processar cada
+ * mensagem, best-effort do lado de quem chama (nunca deve travar o
+ * atendimento se o Portal estiver fora do ar). Rota simples HTTP, fora do
+ * protocolo MCP (nao e uma ferramenta que a IA decide chamar).
+ */
+app.post('/mensagens/registrar', async (req, res) => {
+  const corpo = z
+    .object({
+      agent_id: z.number(),
+      numero_whatsapp: z.string(),
+      nome_contato: z.string().nullish(),
+      remetente: z.enum(['PACIENTE', 'CLINICA']),
+      texto: z.string().min(1),
+    })
+    .safeParse(req.body)
+  if (!corpo.success) return res.status(400).json({ erro: 'Dados inválidos' })
+
+  try {
+    const clinicaId = await resolverClinicaId(corpo.data.agent_id)
+    const telefone = normalizarTelefone(corpo.data.numero_whatsapp.split('@')[0])
+    const paciente = await prisma.paciente.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone } } })
+    const conversa = await prisma.conversa.upsert({
+      where: { clinicaId_telefone: { clinicaId, telefone } },
+      create: { clinicaId, telefone, nomeContato: corpo.data.nome_contato, pacienteId: paciente?.id },
+      update: {
+        ultimaMensagemEm: new Date(),
+        ...(corpo.data.remetente === 'PACIENTE' && { naoLidas: { increment: 1 } }),
+        ...(corpo.data.nome_contato && { nomeContato: corpo.data.nome_contato }),
+      },
+    })
+    await prisma.mensagem.create({ data: { conversaId: conversa.id, de: corpo.data.remetente, texto: corpo.data.texto } })
+    res.json({ status: 'registrado' })
+  } catch (e) {
+    if (e instanceof ErroFerramenta) return res.status(404).json({ erro: e.message })
+    console.error(e)
+    res.status(500).json({ erro: 'Erro interno' })
+  }
 })
 
 // Stateless: cada chamada cria sua propria sessao MCP e fecha no final -

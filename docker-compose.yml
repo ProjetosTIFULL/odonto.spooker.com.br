@@ -13,6 +13,9 @@ services:
     networks:
       - default
 
+  # Tambem entra na rede compartilhada do spooker-platform - fala com o
+  # api-gateway do Orquestrador pra conectar/desconectar WhatsApp e
+  # mandar mensagem manual do atendente.
   api:
     build: ./server
     restart: unless-stopped
@@ -22,12 +25,14 @@ services:
       JWT_SECRET: ${JWT_SECRET:-troque-por-um-segredo-bem-longo-32-chars}
       PORT: 3333
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5180}
+      GATEWAY_URL: http://api-gateway:8200
     ports:
       - '127.0.0.1:3333:3333'
     depends_on:
       - db
     networks:
       - default
+      - spooker-net
 
   # Servidor MCP de odontologia - so este precisa falar com o Orquestrador
   # (spooker-platform), por isso tambem entra na rede compartilhada dele.

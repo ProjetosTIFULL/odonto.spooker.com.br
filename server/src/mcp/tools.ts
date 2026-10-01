@@ -16,9 +16,9 @@ const OCUPAM = ['AGENDADA', 'CONFIRMADA', 'EM_ATENDIMENTO', 'CONCLUIDA'] as cons
 const DURACAO_PADRAO_MIN = 30
 const MAX_HORARIOS_MOSTRADOS = 8
 
-class ErroFerramenta extends Error {}
+export class ErroFerramenta extends Error {}
 
-async function resolverClinicaId(agentId: number): Promise<string> {
+export async function resolverClinicaId(agentId: number): Promise<string> {
   const clinica = await prisma.clinica.findUnique({ where: { agentId } })
   if (!clinica) throw new ErroFerramenta(`Nenhuma clínica do Portal Odonto está ligada ao agente ${agentId}.`)
   return clinica.id
@@ -146,9 +146,17 @@ export async function agendarConsulta(args: {
 export async function buscarItemCatalogo(args: { agent_id: number; busca: string }) {
   try {
     const clinicaId = await resolverClinicaId(args.agent_id)
-    const item = await prisma.procedimento.findFirst({
-      where: { clinicaId, ativo: true, nome: { contains: args.busca, mode: 'insensitive' } },
-    })
+    const itens = await prisma.procedimento.findMany({ where: { clinicaId, ativo: true } })
+
+    // Busca nos dois sentidos: "limpeza" acha "Limpeza dentária" e
+    // "limpeza dentária" acha "Limpeza" - nem sempre o cliente usa o
+    // nome exatamente igual ao cadastrado.
+    const buscaNorm = args.busca.trim().toLowerCase()
+    const item =
+      itens.find((i) => i.nome.toLowerCase().includes(buscaNorm) || buscaNorm.includes(i.nome.toLowerCase())) ??
+      // ultimo recurso: alguma palavra em comum (ex: busca "fazer limpeza" bate com "Limpeza")
+      itens.find((i) => i.nome.toLowerCase().split(/\s+/).some((palavra) => buscaNorm.split(/\s+/).includes(palavra)))
+
     if (!item) return { erro: 'Procedimento não encontrado no catálogo' }
     return { nome: item.nome, valor: Number(item.valor), duracao_min: item.duracaoMin }
   } catch (e) {

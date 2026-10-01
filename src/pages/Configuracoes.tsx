@@ -6,6 +6,7 @@ import { procedimentos } from '../data/mock'
 import Colaboradores from './config/Colaboradores'
 import McpAgente from './config/McpAgente'
 import Usuarios from './config/Usuarios'
+import WhatsApp from './config/WhatsApp'
 
 const SECOES = [
   { id: 'clinica', label: 'Dados da clínica', icon: Building2 },
@@ -80,21 +81,7 @@ function render(secao: SecaoId) {
         </Card>
       )
     case 'whatsapp':
-      return (
-        <Card title="Integração WhatsApp">
-          <p className="muted">Conecte o número da clínica para enviar e receber mensagens pelo portal.</p>
-          <div className="wpp-status">
-            <span className="status-dot off" /> Não conectado
-            <button className="btn btn-primary btn-sm">Conectar número</button>
-          </div>
-          <Placeholder items={[
-            'Conexão via WhatsApp Business API (oficial) ou QR Code',
-            'Respostas rápidas / modelos de mensagem',
-            'Mensagem de ausência fora do horário',
-            'Distribuição de conversas entre atendentes',
-          ]} />
-        </Card>
-      )
+      return <WhatsApp />
     case 'mcp':
       return <McpAgente />
     case 'notificacoes':
