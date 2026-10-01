@@ -1,0 +1,196 @@
+// Multi-tenant: todo dado pertence a uma Clinica (clínica ou dentista autônomo).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TipoConta {
+  CLINICA
+  AUTONOMO
+}
+
+enum Papel {
+  ADMIN
+  DENTISTA
+  RECEPCAO
+}
+
+enum StatusPaciente {
+  ATIVO
+  EM_TRATAMENTO
+  INATIVO
+}
+
+enum StatusConsulta {
+  AGENDADA
+  CONFIRMADA
+  EM_ATENDIMENTO
+  CONCLUIDA
+  FALTOU
+  CANCELADA
+}
+
+enum Remetente {
+  PACIENTE
+  CLINICA
+}
+
+model Clinica {
+  id        String    @id @default(uuid())
+  tipo      TipoConta @default(CLINICA)
+  nome      String
+  documento String? // CNPJ ou CPF
+  cro       String?
+  telefone  String?
+  email     String?
+  endereco  String?
+  criadoEm  DateTime  @default(now())
+
+  usuarios      Usuario[]
+  profissionais Profissional[]
+  pacientes     Paciente[]
+  procedimentos Procedimento[]
+  consultas     Consulta[]
+  horarios      HorarioAtendimento[]
+  conversas     Conversa[]
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  clinicaId String
+  nome      String
+  email     String   @unique
+  senhaHash String
+  papel     Papel    @default(RECEPCAO)
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  profissional Profissional?
+
+  @@index([clinicaId])
+}
+
+model Profissional {
+  id            String  @id @default(uuid())
+  clinicaId     String
+  usuarioId     String? @unique
+  nome          String
+  especialidade String?
+  cro           String?
+  cor           String  @default("#0e7c86")
+  ativo         Boolean @default(true)
+
+  clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  usuario   Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  consultas Consulta[]
+
+  @@index([clinicaId])
+}
+
+model Paciente {
+  id          String         @id @default(uuid())
+  clinicaId   String
+  nome        String
+  telefone    String // somente dígitos, com DDI: 5551999999999
+  email       String?
+  cpf         String?
+  nascimento  DateTime?      @db.Date
+  convenio    String?
+  observacoes String?
+  status      StatusPaciente @default(ATIVO)
+  criadoEm    DateTime       @default(now())
+  atualizadoEm DateTime      @updatedAt
+
+  clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  consultas Consulta[]
+  conversas Conversa[]
+
+  @@unique([clinicaId, telefone])
+  @@index([clinicaId, nome])
+}
+
+model Procedimento {
+  id         String  @id @default(uuid())
+  clinicaId  String
+  nome       String
+  codigoTuss String?
+  duracaoMin Int     @default(30)
+  valor      Decimal @db.Decimal(10, 2)
+  ativo      Boolean @default(true)
+
+  clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  consultas Consulta[]
+
+  @@index([clinicaId])
+}
+
+model Consulta {
+  id             String         @id @default(uuid())
+  clinicaId      String
+  pacienteId     String
+  profissionalId String
+  procedimentoId String?
+  inicio         DateTime
+  fim            DateTime
+  status         StatusConsulta @default(AGENDADA)
+  valor          Decimal?       @db.Decimal(10, 2)
+  observacoes    String?
+  criadoEm       DateTime       @default(now())
+  atualizadoEm   DateTime       @updatedAt
+
+  clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  profissional Profissional  @relation(fields: [profissionalId], references: [id])
+  procedimento Procedimento? @relation(fields: [procedimentoId], references: [id], onDelete: SetNull)
+
+  @@index([clinicaId, inicio])
+  @@index([profissionalId, inicio])
+}
+
+model HorarioAtendimento {
+  id        String  @id @default(uuid())
+  clinicaId String
+  diaSemana Int // 0 = domingo ... 6 = sábado
+  abre      String // "08:00"
+  fecha     String // "19:00"
+  ativo     Boolean @default(true)
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicaId, diaSemana])
+}
+
+model Conversa {
+  id              String    @id @default(uuid())
+  clinicaId       String
+  pacienteId      String?
+  telefone        String
+  nomeContato     String?
+  naoLidas        Int       @default(0)
+  ultimaMensagemEm DateTime @default(now())
+
+  clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  paciente  Paciente?  @relation(fields: [pacienteId], references: [id], onDelete: SetNull)
+  mensagens Mensagem[]
+
+  @@unique([clinicaId, telefone])
+  @@index([clinicaId, ultimaMensagemEm])
+}
+
+model Mensagem {
+  id         String    @id @default(uuid())
+  conversaId String
+  de         Remetente
+  texto      String
+  enviadaEm  DateTime  @default(now())
+
+  conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  @@index([conversaId, enviadaEm])
+}
