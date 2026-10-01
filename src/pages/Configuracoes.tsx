@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Bell, Bot, Building2, Clock, CreditCard, MessageCircle, ShieldCheck, Stethoscope, Users } from 'lucide-react'
 import { Card, Placeholder } from '../components/ui'
-import SyncMcpButton from '../components/SyncMcpButton'
-import { procedimentos } from '../data/mock'
 import Colaboradores from './config/Colaboradores'
+import DadosClinica from './config/DadosClinica'
+import Horarios from './config/Horarios'
 import McpAgente from './config/McpAgente'
+import Procedimentos from './config/Procedimentos'
 import Usuarios from './config/Usuarios'
 import WhatsApp from './config/WhatsApp'
 
@@ -42,44 +43,12 @@ export default function Configuracoes() {
 function render(secao: SecaoId) {
   switch (secao) {
     case 'clinica':
-      return (
-        <Card title="Dados da clínica">
-          <form className="form-grid" onSubmit={(e) => e.preventDefault()}>
-            <label>Tipo de conta
-              <select className="input" defaultValue="clinica">
-                <option value="clinica">Clínica</option>
-                <option value="autonomo">Dentista autônomo</option>
-              </select>
-            </label>
-            <label>Nome / Razão social<input className="input" defaultValue="Clínica Sorriso" /></label>
-            <label>CNPJ / CPF<input className="input" placeholder="00.000.000/0000-00" /></label>
-            <label>CRO responsável<input className="input" placeholder="CRO-RS 00000" /></label>
-            <label>Telefone<input className="input" defaultValue="(51) 3333-0000" /></label>
-            <label>E-mail<input className="input" defaultValue="contato@clinicasorriso.com.br" /></label>
-            <label className="span-2">Endereço<input className="input" placeholder="Rua, número, bairro, cidade" /></label>
-            <div className="span-2"><button className="btn btn-primary">Salvar</button></div>
-          </form>
-        </Card>
-      )
+      return <DadosClinica />
     case 'profissionais':
       return <Colaboradores />
 
     case 'horarios':
-      return (
-        <Card title="Horários de atendimento" action={<SyncMcpButton recurso="horários de atendimento" />}>
-          <table className="table">
-            <tbody>
-              {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((d, i) => (
-                <tr key={d}>
-                  <td><label className="check"><input type="checkbox" defaultChecked={i < 6} /> {d}</label></td>
-                  <td><input type="time" className="input" defaultValue="08:00" /></td>
-                  <td><input type="time" className="input" defaultValue={i === 5 ? '12:00' : '19:00'} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )
+      return <Horarios />
     case 'whatsapp':
       return <WhatsApp />
     case 'mcp':
@@ -97,41 +66,7 @@ function render(secao: SecaoId) {
         </Card>
       )
     case 'procedimentos':
-      return (
-        <Card
-          title="Procedimentos e preços"
-          action={
-            <div className="toolbar-group">
-              <SyncMcpButton recurso="procedimentos e preços" />
-              <button className="btn btn-primary btn-sm">Adicionar</button>
-            </div>
-          }
-        >
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Procedimento</th>
-                  <th>Código TUSS</th>
-                  <th>Duração</th>
-                  <th>Valor particular</th>
-                </tr>
-              </thead>
-              <tbody>
-                {procedimentos.map((p) => (
-                  <tr key={p.nome}>
-                    <td>{p.nome}</td>
-                    <td className="muted">{p.tuss}</td>
-                    <td>{p.duracao} min</td>
-                    <td>{p.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Placeholder items={['Tabelas de preço por convênio']} />
-        </Card>
-      )
+      return <Procedimentos />
     case 'usuarios':
       return <Usuarios />
     case 'plano':
