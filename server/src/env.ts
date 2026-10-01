@@ -6,6 +6,7 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET precisa ter pelo menos 32 caracteres'),
   PORT: z.coerce.number().default(3333),
   CORS_ORIGIN: z.string().default('http://localhost:5180'),
+  MCP_PORT: z.coerce.number().default(3334),
 })
 
 export const env = schema.parse(process.env)

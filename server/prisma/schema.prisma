@@ -59,6 +59,9 @@ model Clinica {
   telefone  String?
   email     String?
   endereco  String?
+  /// Id do agente correspondente no Orquestrador (spooker-platform) - liga essa clínica
+  /// ao agente de WhatsApp/IA dela. Null = clínica ainda não tem agente de IA conectado.
+  agentId   Int?      @unique
   criadoEm  DateTime  @default(now())
 
   usuarios      Usuario[]
