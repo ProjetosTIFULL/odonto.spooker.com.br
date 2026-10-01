@@ -29,7 +29,11 @@ function criarServidor() {
 
   server.tool(
     'buscar_horarios_disponiveis',
-    "Retorna horários livres de um dentista num dia (formato AAAA-MM-DD). periodo é opcional: 'manha', 'tarde' ou 'noite'.",
+    "Retorna horários livres de um dentista num dia (formato AAAA-MM-DD). periodo é opcional: 'manha', 'tarde' ou " +
+      'noite\'. ATENÇÃO: isso só CONSULTA a agenda, não marca nada. Ver um horário aqui NÃO significa que a ' +
+      'consulta foi agendada - depois que o cliente confirmar o horário, você AINDA PRECISA chamar a ferramenta ' +
+      'agendar_consulta para criar a consulta de verdade. NUNCA diga ao cliente que a consulta está marcada/' +
+      'confirmada sem antes ter chamado agendar_consulta e recebido {"status":"agendado"} de volta.',
     {
       agent_id: z.number(),
       data: z.string(),
@@ -41,8 +45,13 @@ function criarServidor() {
 
   server.tool(
     'agendar_consulta',
-    'Agenda uma consulta de ponta a ponta: busca o paciente pelo número de WhatsApp (ou cadastra se não existir) ' +
-      'e cria a consulta no horário pedido. data_hora no formato "AAAA-MM-DD HH:MM".',
+    'Cria a consulta DE VERDADE na agenda (sem chamar isso, NADA fica marcado, mesmo que você já tenha visto o ' +
+      'horário como livre). Busca o paciente pelo número de WhatsApp de quem está mandando a mensagem (ou ' +
+      'cadastra se não existir) e cria a consulta no horário pedido, já usando o número certo internamente. ' +
+      'NUNCA peça o telefone ao cliente - o numero_whatsapp já é o número real e correto de quem está ' +
+      'conversando, preenchido automaticamente pelo sistema. Formato data_hora: "AAAA-MM-DD HH:MM". Só diga ao ' +
+      'cliente que a consulta está confirmada DEPOIS de chamar esta ferramenta e ela responder com sucesso ' +
+      '(status "agendado") - nunca antes.',
     {
       agent_id: z.number(),
       numero_whatsapp: z.string(),
@@ -108,6 +117,10 @@ app.post('/mensagens/registrar', async (req, res) => {
         ultimaMensagemEm: new Date(),
         ...(corpo.data.remetente === 'PACIENTE' && { naoLidas: { increment: 1 } }),
         ...(corpo.data.nome_contato && { nomeContato: corpo.data.nome_contato }),
+        // Religa ao paciente se ele foi cadastrado DEPOIS que essa conversa
+        // ja existia (ex: criado durante o proprio agendamento) - uma
+        // conversa que ja estava ligada nunca e desligada aqui.
+        ...(paciente && { pacienteId: paciente.id }),
       },
     })
     await prisma.mensagem.create({ data: { conversaId: conversa.id, de: corpo.data.remetente, texto: corpo.data.texto } })
