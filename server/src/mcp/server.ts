@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { prisma } from '../db.ts'
 import { env } from '../env.ts'
 import { normalizarTelefone } from '../lib/http.ts'
+import { salvarMidia } from '../lib/midia.ts'
 import * as tools from './tools.ts'
 import { ErroFerramenta, resolverClinicaId } from './tools.ts'
 
@@ -81,18 +82,46 @@ function criarServidor() {
 }
 
 const app = express()
-app.use(express.json())
+// Limite maior que o padrao (100kb) - midia recebida do paciente chega
+// aqui como JSON base64 (overhead de ~33% sobre o arquivo original).
+app.use(express.json({ limit: '25mb' }))
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
 /**
- * Espelha uma mensagem (de qualquer lado) na tela de Chat do Portal -
- * chamado pelo Orquestrador (spooker-platform) depois de processar cada
- * mensagem, best-effort do lado de quem chama (nunca deve travar o
- * atendimento se o Portal estiver fora do ar). Rota simples HTTP, fora do
- * protocolo MCP (nao e uma ferramenta que a IA decide chamar).
+ * Acha (ou cria) a Conversa certa pra uma mensagem chegando/saindo,
+ * religando ao Paciente se for o caso - usado tanto por /mensagens/
+ * registrar (texto) quanto /mensagens/midia (foto/video/documento).
+ */
+async function conversaParaMensagem(agentId: number, numeroWhatsapp: string, nomeContato: string | null | undefined, remetente: 'PACIENTE' | 'CLINICA') {
+  const clinicaId = await resolverClinicaId(agentId)
+  const telefone = normalizarTelefone(numeroWhatsapp.split('@')[0])
+  const paciente = await prisma.paciente.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone } } })
+  const conversa = await prisma.conversa.upsert({
+    where: { clinicaId_telefone: { clinicaId, telefone } },
+    create: { clinicaId, telefone, nomeContato, pacienteId: paciente?.id },
+    update: {
+      ultimaMensagemEm: new Date(),
+      ...(remetente === 'PACIENTE' && { naoLidas: { increment: 1 } }),
+      ...(nomeContato && { nomeContato }),
+      // Religa ao paciente se ele foi cadastrado DEPOIS que essa conversa
+      // ja existia (ex: criado durante o proprio agendamento) - uma
+      // conversa que ja estava ligada nunca e desligada aqui.
+      ...(paciente && { pacienteId: paciente.id }),
+    },
+  })
+  return conversa
+}
+
+/**
+ * Espelha uma mensagem de TEXTO (de qualquer lado) na tela de Chat do
+ * Portal - chamado pelo Orquestrador (spooker-platform) depois de
+ * processar cada mensagem, best-effort do lado de quem chama (nunca
+ * deve travar o atendimento se o Portal estiver fora do ar). Rota
+ * simples HTTP, fora do protocolo MCP (nao e uma ferramenta que a IA
+ * decide chamar).
  */
 app.post('/mensagens/registrar', async (req, res) => {
   const corpo = z
@@ -102,28 +131,65 @@ app.post('/mensagens/registrar', async (req, res) => {
       nome_contato: z.string().nullish(),
       remetente: z.enum(['PACIENTE', 'CLINICA']),
       texto: z.string().min(1),
+      whatsapp_id: z.string().nullish(),
     })
     .safeParse(req.body)
   if (!corpo.success) return res.status(400).json({ erro: 'Dados inválidos' })
 
   try {
-    const clinicaId = await resolverClinicaId(corpo.data.agent_id)
-    const telefone = normalizarTelefone(corpo.data.numero_whatsapp.split('@')[0])
-    const paciente = await prisma.paciente.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone } } })
-    const conversa = await prisma.conversa.upsert({
-      where: { clinicaId_telefone: { clinicaId, telefone } },
-      create: { clinicaId, telefone, nomeContato: corpo.data.nome_contato, pacienteId: paciente?.id },
-      update: {
-        ultimaMensagemEm: new Date(),
-        ...(corpo.data.remetente === 'PACIENTE' && { naoLidas: { increment: 1 } }),
-        ...(corpo.data.nome_contato && { nomeContato: corpo.data.nome_contato }),
-        // Religa ao paciente se ele foi cadastrado DEPOIS que essa conversa
-        // ja existia (ex: criado durante o proprio agendamento) - uma
-        // conversa que ja estava ligada nunca e desligada aqui.
-        ...(paciente && { pacienteId: paciente.id }),
-      },
+    const conversa = await conversaParaMensagem(corpo.data.agent_id, corpo.data.numero_whatsapp, corpo.data.nome_contato, corpo.data.remetente)
+    await prisma.mensagem.create({
+      data: { conversaId: conversa.id, de: corpo.data.remetente, texto: corpo.data.texto, whatsappId: corpo.data.whatsapp_id },
     })
-    await prisma.mensagem.create({ data: { conversaId: conversa.id, de: corpo.data.remetente, texto: corpo.data.texto } })
+    res.json({ status: 'registrado' })
+  } catch (e) {
+    if (e instanceof ErroFerramenta) return res.status(404).json({ erro: e.message })
+    console.error(e)
+    res.status(500).json({ erro: 'Erro interno' })
+  }
+})
+
+/**
+ * Confirmacao de entrega/leitura (evento messages.update da Evolution
+ * API, repassado pelo Orquestrador) - atualiza o status da mensagem
+ * CLINICA que tem esse whatsapp_id. Silenciosamente nao faz nada se
+ * nao achar (mensagem pode ter sido mandada antes dessa funcionalidade
+ * existir, ou o espelhamento pode ter falhado).
+ */
+app.post('/mensagens/status', async (req, res) => {
+  const corpo = z.object({ whatsapp_id: z.string().min(1), status: z.enum(['ENVIADA', 'ENTREGUE', 'LIDA', 'FALHOU']) }).safeParse(req.body)
+  if (!corpo.success) return res.status(400).json({ erro: 'Dados inválidos' })
+
+  await prisma.mensagem.updateMany({ where: { whatsappId: corpo.data.whatsapp_id }, data: { status: corpo.data.status } })
+  res.json({ status: 'ok' })
+})
+
+/**
+ * Espelha uma mensagem de MIDIA (foto/video/audio/documento) recebida
+ * de um paciente - chamado pelo Orquestrador quando o webhook da
+ * Evolution API traz uma mensagem desse tipo. Salva o arquivo aqui
+ * mesmo (pasta compartilhada com o container "api", que serve em
+ * /api/uploads/).
+ */
+app.post('/mensagens/midia', async (req, res) => {
+  const corpo = z
+    .object({
+      agent_id: z.number(),
+      numero_whatsapp: z.string(),
+      nome_contato: z.string().nullish(),
+      data_base64: z.string().min(1),
+      mime_type: z.string().min(1),
+      legenda: z.string().nullish(),
+    })
+    .safeParse(req.body)
+  if (!corpo.success) return res.status(400).json({ erro: 'Dados inválidos' })
+
+  try {
+    const conversa = await conversaParaMensagem(corpo.data.agent_id, corpo.data.numero_whatsapp, corpo.data.nome_contato, 'PACIENTE')
+    const { caminhoRelativo, tipo } = await salvarMidia(corpo.data.data_base64, corpo.data.mime_type)
+    await prisma.mensagem.create({
+      data: { conversaId: conversa.id, de: 'PACIENTE', texto: corpo.data.legenda, midiaUrl: caminhoRelativo, midiaTipo: tipo },
+    })
     res.json({ status: 'registrado' })
   } catch (e) {
     if (e instanceof ErroFerramenta) return res.status(404).json({ erro: e.message })

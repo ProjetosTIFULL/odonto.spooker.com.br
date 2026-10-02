@@ -50,6 +50,15 @@ enum Remetente {
   CLINICA
 }
 
+/// So se aplica a mensagens da CLINICA - o que a Evolution API (WhatsApp)
+/// reporta via evento messages.update (equivalente aos "tiquinhos" azuis).
+enum StatusMensagem {
+  ENVIADA
+  ENTREGUE
+  LIDA
+  FALHOU
+}
+
 model Clinica {
   id        String    @id @default(uuid())
   tipo      TipoConta @default(CLINICA)
@@ -203,15 +212,20 @@ model Conversa {
 }
 
 model Mensagem {
-  id         String    @id @default(uuid())
-  conversaId String
-  de         Remetente
-  texto      String
-  enviadaEm  DateTime  @default(now())
+  id            String        @id @default(uuid())
+  conversaId    String
+  de            Remetente
+  texto         String?
+  midiaUrl      String?
+  midiaTipo     String?
+  whatsappId    String?
+  status        StatusMensagem @default(ENVIADA)
+  enviadaEm     DateTime      @default(now())
 
   conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
 
   @@index([conversaId, enviadaEm])
+  @@index([whatsappId])
 }
 
 /// Nota pós-consulta (1 a 5) dada pelo paciente. Uma por consulta concluída.

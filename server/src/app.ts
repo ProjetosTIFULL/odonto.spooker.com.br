@@ -1,6 +1,8 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import staticFiles from '@fastify/static'
+import path from 'node:path'
 import { z, ZodError } from 'zod'
 import { env } from './env.ts'
 import { Prisma } from './generated/prisma/client.ts'
@@ -25,7 +27,10 @@ function replacer(this: Record<string, unknown>, key: string, value: unknown) {
 }
 
 export async function buildApp() {
-  const app = Fastify({ logger: { level: 'info' } })
+  // bodyLimit maior que o padrao (1MB) - midia do Chat viaja como JSON
+  // base64 (overhead de ~33% sobre o arquivo original), precisa de
+  // folga pra fotos/videos curtos tipicos de WhatsApp.
+  const app = Fastify({ logger: { level: 'info' }, bodyLimit: 25 * 1024 * 1024 })
 
   app.setReplySerializer((payload) => JSON.stringify(payload, replacer))
 
@@ -62,6 +67,13 @@ export async function buildApp() {
   })
 
   app.get('/api/health', async () => ({ ok: true }))
+
+  // Midia do Chat (fotos/videos enviados e recebidos) - fora do prefixo
+  // /api e sem autenticacao de proposito: a Evolution API (processo
+  // externo, sem JWT nosso) precisa buscar esse arquivo pra enviar
+  // pelo WhatsApp. Seguranca vem do nome de arquivo aleatorio (UUID),
+  // mesmo modelo usado por CDNs de midia de chat em geral.
+  await app.register(staticFiles, { root: path.resolve(env.UPLOADS_DIR), prefix: '/api/uploads/' })
 
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(clinicaRoutes, { prefix: '/api/clinica' })

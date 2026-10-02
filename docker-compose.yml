@@ -28,6 +28,8 @@ services:
       GATEWAY_URL: http://api-gateway:8200
     ports:
       - '127.0.0.1:3333:3333'
+    volumes:
+      - odonto-uploads:/app/uploads
     depends_on:
       - db
     networks:
@@ -36,6 +38,9 @@ services:
 
   # Servidor MCP de odontologia - so este precisa falar com o Orquestrador
   # (spooker-platform), por isso tambem entra na rede compartilhada dele.
+  # Mesmo volume de uploads que o "api": e o MCP quem recebe midia do
+  # paciente (via /mensagens/midia) e grava aqui - o "api" serve esse
+  # mesmo arquivo depois, pelo /api/uploads/.
   mcp:
     build: ./server
     restart: unless-stopped
@@ -46,6 +51,8 @@ services:
       MCP_PORT: 3334
     ports:
       - '127.0.0.1:3334:3334'
+    volumes:
+      - odonto-uploads:/app/uploads
     depends_on:
       - db
     networks:
@@ -80,3 +87,4 @@ networks:
 
 volumes:
   odonto-db:
+  odonto-uploads:

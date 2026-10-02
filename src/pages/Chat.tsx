@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { Paperclip, Search, Send, Zap } from 'lucide-react'
+import { Check, CheckCheck, Clock, FileText, Paperclip, Search, Send, X, Zap } from 'lucide-react'
 import { Avatar } from '../components/ui'
 import { api } from '../lib/api'
 
-type Mensagem = { id: string; de: 'PACIENTE' | 'CLINICA'; texto: string; enviadaEm: string }
+type StatusMensagem = 'ENVIADA' | 'ENTREGUE' | 'LIDA' | 'FALHOU'
+type Mensagem = {
+  id: string
+  de: 'PACIENTE' | 'CLINICA'
+  texto: string | null
+  midiaUrl: string | null
+  midiaTipo: string | null
+  status: StatusMensagem
+  enviadaEm: string
+}
 type ConversaResumo = {
   id: string
   telefone: string
@@ -22,8 +31,67 @@ const RESPOSTAS_RAPIDAS = [
   'Posso te enviar os horários disponíveis para agendamento?',
 ]
 
+// Tamanho maximo de anexo - mesma folga que o backend aceita (bodyLimit
+// 25MB pro JSON com base64, que tem ~33% de overhead sobre o arquivo).
+const TAMANHO_MAXIMO_ANEXO = 18 * 1024 * 1024
+
 const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const nomeDaConversa = (c: ConversaResumo) => c.paciente?.nome || c.nomeContato || c.telefone
+const previaMensagem = (m: Mensagem | null) => {
+  if (!m) return ''
+  if (m.midiaTipo === 'image') return '📷 Foto'
+  if (m.midiaTipo === 'video') return '🎥 Vídeo'
+  if (m.midiaTipo === 'audio') return '🎵 Áudio'
+  if (m.midiaTipo) return '📄 Documento'
+  return m.texto ?? ''
+}
+
+function arquivoParaBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader()
+    leitor.onload = () => resolve((leitor.result as string).split(',')[1] ?? '')
+    leitor.onerror = reject
+    leitor.readAsDataURL(file)
+  })
+}
+
+/** Tiquinhos de status, igual ao WhatsApp - só faz sentido pra mensagens CLINICA. */
+function IconeStatus({ status }: { status: StatusMensagem }) {
+  if (status === 'LIDA') return <CheckCheck size={14} className="status-lida" />
+  if (status === 'ENTREGUE') return <CheckCheck size={14} />
+  if (status === 'FALHOU') return <Clock size={14} />
+  return <Check size={14} />
+}
+
+function ConteudoMensagem({ m }: { m: Mensagem }) {
+  if (m.midiaTipo === 'image' && m.midiaUrl) {
+    return (
+      <>
+        <img src={m.midiaUrl} alt={m.texto ?? 'Foto'} className="bubble-media" />
+        {m.texto && <div className="bubble-caption">{m.texto}</div>}
+      </>
+    )
+  }
+  if (m.midiaTipo === 'video' && m.midiaUrl) {
+    return (
+      <>
+        <video src={m.midiaUrl} controls className="bubble-media" />
+        {m.texto && <div className="bubble-caption">{m.texto}</div>}
+      </>
+    )
+  }
+  if (m.midiaTipo === 'audio' && m.midiaUrl) {
+    return <audio src={m.midiaUrl} controls className="bubble-audio" />
+  }
+  if (m.midiaUrl) {
+    return (
+      <a href={m.midiaUrl} target="_blank" rel="noreferrer" className="bubble-doc">
+        <FileText size={20} /> {m.texto || 'Documento'}
+      </a>
+    )
+  }
+  return <>{m.texto}</>
+}
 
 export default function Chat() {
   const [conversas, setConversas] = useState<ConversaResumo[]>([])
@@ -32,7 +100,11 @@ export default function Chat() {
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
   const [mostrarRapidas, setMostrarRapidas] = useState(false)
+  const [anexo, setAnexo] = useState<{ file: File; preview: string } | null>(null)
+  const [enviandoAnexo, setEnviandoAnexo] = useState(false)
   const intervaloLista = useRef<ReturnType<typeof setInterval>>(undefined)
+  const fimDasMensagens = useRef<HTMLDivElement>(null)
+  const inputArquivo = useRef<HTMLInputElement>(null)
 
   const carregarLista = () => {
     api<ConversaResumo[]>('/conversas').then((cs) => {
@@ -51,12 +123,19 @@ export default function Chat() {
     if (!ativaId) return
     const carregarAtiva = () => api<ConversaDetalhe>(`/conversas/${ativaId}`).then(setAtiva)
     carregarAtiva()
-    // Sem isso, uma mensagem nova chegando na conversa JA ABERTA so aparecia
-    // trocando de conversa e voltando (ou com F5) - o polling da lista ao
-    // lado nao recarrega o painel central sozinho.
+    // Sem isso, uma mensagem nova (ou status de entrega/leitura) chegando
+    // na conversa JA ABERTA so aparecia trocando de conversa e voltando
+    // (ou com F5) - o polling da lista ao lado nao recarrega o painel
+    // central sozinho.
     const intervalo = setInterval(carregarAtiva, 3000)
     return () => clearInterval(intervalo)
   }, [ativaId])
+
+  useEffect(() => {
+    fimDasMensagens.current?.scrollIntoView({ block: 'end' })
+  }, [ativa?.mensagens])
+
+  useEffect(() => () => anexo && URL.revokeObjectURL(anexo.preview), [anexo])
 
   const abrir = (id: string) => setAtivaId(id)
 
@@ -68,6 +147,36 @@ export default function Chat() {
     })
     setTexto('')
     setMostrarRapidas(false)
+  }
+
+  const escolherArquivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > TAMANHO_MAXIMO_ANEXO) {
+      alert('Arquivo muito grande (máximo 18MB).')
+      return
+    }
+    setAnexo({ file, preview: URL.createObjectURL(file) })
+  }
+
+  const enviarAnexo = async () => {
+    if (!anexo || !ativaId) return
+    setEnviandoAnexo(true)
+    try {
+      const dataBase64 = await arquivoParaBase64(anexo.file)
+      const m = await api<Mensagem>(`/conversas/${ativaId}/midia`, {
+        method: 'POST',
+        body: { dataBase64, mimeType: anexo.file.type || 'application/octet-stream', legenda: texto.trim() || undefined },
+      })
+      setAtiva((a) => (a ? { ...a, mensagens: [...a.mensagens, m] } : a))
+      carregarLista()
+      URL.revokeObjectURL(anexo.preview)
+      setAnexo(null)
+      setTexto('')
+    } finally {
+      setEnviandoAnexo(false)
+    }
   }
 
   const filtradas = conversas.filter(
@@ -101,7 +210,7 @@ export default function Chat() {
                   <small className="muted">{c.ultimaMensagem && fmtHora(c.ultimaMensagem.enviadaEm)}</small>
                 </div>
                 <div className="row-between">
-                  <small className="ellipsis">{c.ultimaMensagem?.texto}</small>
+                  <small className="ellipsis">{previaMensagem(c.ultimaMensagem)}</small>
                   {c.naoLidas > 0 && <span className="count">{c.naoLidas}</span>}
                 </div>
               </div>
@@ -122,10 +231,14 @@ export default function Chat() {
         <div className="chat-messages">
           {ativa.mensagens.map((m) => (
             <div key={m.id} className={`bubble ${m.de === 'CLINICA' ? 'out' : 'in'}`}>
-              {m.texto}
-              <small>{fmtHora(m.enviadaEm)}</small>
+              <ConteudoMensagem m={m} />
+              <small className="bubble-meta">
+                {fmtHora(m.enviadaEm)}
+                {m.de === 'CLINICA' && <IconeStatus status={m.status} />}
+              </small>
             </div>
           ))}
+          <div ref={fimDasMensagens} />
         </div>
 
         {mostrarRapidas && (
@@ -136,13 +249,40 @@ export default function Chat() {
           </div>
         )}
 
+        {anexo && (
+          <div className="attachment-preview">
+            {anexo.file.type.startsWith('image/') ? (
+              <img src={anexo.preview} alt="" />
+            ) : anexo.file.type.startsWith('video/') ? (
+              <video src={anexo.preview} />
+            ) : (
+              <div className="attachment-preview-doc"><FileText size={20} /> {anexo.file.name}</div>
+            )}
+            <input
+              placeholder="Adicionar legenda (opcional)"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && enviarAnexo()}
+            />
+            <button type="button" className="icon-btn" title="Cancelar" onClick={() => { URL.revokeObjectURL(anexo.preview); setAnexo(null) }}>
+              <X size={18} />
+            </button>
+            <button type="button" className="btn btn-primary" disabled={enviandoAnexo} onClick={enviarAnexo}>
+              <Send size={16} />
+            </button>
+          </div>
+        )}
+
         <form className="chat-input" onSubmit={(e) => { e.preventDefault(); enviar() }}>
           <button type="button" className="icon-btn" title="Respostas rápidas" onClick={() => setMostrarRapidas((v) => !v)}>
             <Zap size={18} />
           </button>
-          <button type="button" className="icon-btn" title="Anexar"><Paperclip size={18} /></button>
-          <input placeholder="Digite uma mensagem" value={texto} onChange={(e) => setTexto(e.target.value)} />
-          <button type="submit" className="btn btn-primary" aria-label="Enviar"><Send size={16} /></button>
+          <input ref={inputArquivo} type="file" accept="image/*,video/*,audio/*,.pdf" hidden onChange={escolherArquivo} />
+          <button type="button" className="icon-btn" title="Anexar" onClick={() => inputArquivo.current?.click()}>
+            <Paperclip size={18} />
+          </button>
+          <input placeholder="Digite uma mensagem" value={texto} onChange={(e) => setTexto(e.target.value)} disabled={!!anexo} />
+          <button type="submit" className="btn btn-primary" aria-label="Enviar" disabled={!!anexo}><Send size={16} /></button>
         </form>
       </section>
     </div>

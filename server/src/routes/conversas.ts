@@ -4,6 +4,7 @@ import { autenticar, EQUIPE_ATENDIMENTO, exigirPapel } from '../auth.ts'
 import { prisma } from '../db.ts'
 import { env } from '../env.ts'
 import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
+import { salvarMidia, urlInternaDaMidia } from '../lib/midia.ts'
 
 // O recebimento (mensagem do paciente) chega pelo Orquestrador, que
 // espelha aqui via POST /mensagens/registrar no MCP (ver server/src/mcp/
@@ -11,19 +12,42 @@ import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
 // verdade pelo WhatsApp chamando o api-gateway do Orquestrador direto -
 // best-effort: se falhar, a mensagem fica salva aqui mas nao conseguiu
 // sair, e avisamos o atendente.
-async function enviarPeloWhatsApp(clinicaId: string, telefone: string, texto: string): Promise<string | null> {
+type ResultadoEnvio = { erro: string | null; whatsappId: string | null }
+
+async function enviarPeloWhatsApp(clinicaId: string, telefone: string, texto: string): Promise<ResultadoEnvio> {
   const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
-  if (!clinica?.agentId) return 'Esta clínica ainda não tem um agente de WhatsApp vinculado.'
+  if (!clinica?.agentId) return { erro: 'Esta clínica ainda não tem um agente de WhatsApp vinculado.', whatsappId: null }
   try {
     const r = await fetch(`${env.GATEWAY_URL}/orquestrador/enviar_mensagem_direta`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ agent_id: clinica.agentId, numero_whatsapp: telefone, texto }),
     })
-    const data = (await r.json()) as { erro?: string }
-    return data.erro ?? null
+    const data = (await r.json()) as { erro?: string; whatsapp_id?: string | null }
+    return { erro: data.erro ?? null, whatsappId: data.whatsapp_id ?? null }
   } catch {
-    return 'Não foi possível falar com o WhatsApp agora.'
+    return { erro: 'Não foi possível falar com o WhatsApp agora.', whatsappId: null }
+  }
+}
+
+async function enviarMidiaPeloWhatsApp(
+  clinicaId: string, telefone: string, caminhoRelativo: string, tipo: string, legenda?: string,
+): Promise<ResultadoEnvio> {
+  const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
+  if (!clinica?.agentId) return { erro: 'Esta clínica ainda não tem um agente de WhatsApp vinculado.', whatsappId: null }
+  try {
+    const r = await fetch(`${env.GATEWAY_URL}/orquestrador/enviar_midia_direta`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agent_id: clinica.agentId, numero_whatsapp: telefone,
+        media_url: urlInternaDaMidia(caminhoRelativo), media_type: tipo, legenda: legenda ?? '',
+      }),
+    })
+    const data = (await r.json()) as { erro?: string; whatsapp_id?: string | null }
+    return { erro: data.erro ?? null, whatsappId: data.whatsapp_id ?? null }
+  } catch {
+    return { erro: 'Não foi possível falar com o WhatsApp agora.', whatsappId: null }
   }
 }
 
@@ -95,10 +119,29 @@ export default async function conversasRoutes(app: FastifyInstance) {
     const clinicaId = req.user.clinicaId
     const conversa = await buscar(id, clinicaId)
 
-    const erroEnvio = await enviarPeloWhatsApp(clinicaId, conversa.telefone, texto)
+    const { erro: erroEnvio, whatsappId } = await enviarPeloWhatsApp(clinicaId, conversa.telefone, texto)
 
     const [mensagem] = await prisma.$transaction([
-      prisma.mensagem.create({ data: { conversaId: id, de: 'CLINICA', texto } }),
+      prisma.mensagem.create({ data: { conversaId: id, de: 'CLINICA', texto, whatsappId } }),
+      prisma.conversa.update({ where: { id }, data: { ultimaMensagemEm: new Date() } }),
+    ])
+    return reply.code(201).send({ ...mensagem, avisoEnvio: erroEnvio })
+  })
+
+  /** Envia foto/vídeo/documento pelo WhatsApp - arquivo em base64 no corpo (sem multipart, simples e suficiente pro tamanho típico de mídia de chat). */
+  app.post('/:id/midia', async (req, reply) => {
+    const { id } = idParams.parse(req.params)
+    const { dataBase64, mimeType, legenda } = z
+      .object({ dataBase64: z.string().min(1), mimeType: z.string().min(1), legenda: z.string().trim().max(1024).optional() })
+      .parse(req.body)
+    const clinicaId = req.user.clinicaId
+    const conversa = await buscar(id, clinicaId)
+
+    const { caminhoRelativo, tipo } = await salvarMidia(dataBase64, mimeType)
+    const { erro: erroEnvio, whatsappId } = await enviarMidiaPeloWhatsApp(clinicaId, conversa.telefone, caminhoRelativo, tipo, legenda)
+
+    const [mensagem] = await prisma.$transaction([
+      prisma.mensagem.create({ data: { conversaId: id, de: 'CLINICA', texto: legenda, midiaUrl: caminhoRelativo, midiaTipo: tipo, whatsappId } }),
       prisma.conversa.update({ where: { id }, data: { ultimaMensagemEm: new Date() } }),
     ])
     return reply.code(201).send({ ...mensagem, avisoEnvio: erroEnvio })
