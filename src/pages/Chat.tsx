@@ -135,7 +135,11 @@ export default function Chat() {
     fimDasMensagens.current?.scrollIntoView({ block: 'end' })
   }, [ativa?.mensagens])
 
-  useEffect(() => () => anexo && URL.revokeObjectURL(anexo.preview), [anexo])
+  useEffect(() => {
+    return () => {
+      if (anexo) URL.revokeObjectURL(anexo.preview)
+    }
+  }, [anexo])
 
   const abrir = (id: string) => setAtivaId(id)
 
