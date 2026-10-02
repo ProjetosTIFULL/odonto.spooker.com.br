@@ -43,13 +43,19 @@ export default function Chat() {
 
   useEffect(() => {
     carregarLista()
-    intervaloLista.current = setInterval(carregarLista, 5000) // pega mensagem nova chegando pelo WhatsApp
+    intervaloLista.current = setInterval(carregarLista, 5000) // pega conversa nova chegando pelo WhatsApp
     return () => clearInterval(intervaloLista.current)
   }, [])
 
   useEffect(() => {
     if (!ativaId) return
-    api<ConversaDetalhe>(`/conversas/${ativaId}`).then(setAtiva)
+    const carregarAtiva = () => api<ConversaDetalhe>(`/conversas/${ativaId}`).then(setAtiva)
+    carregarAtiva()
+    // Sem isso, uma mensagem nova chegando na conversa JA ABERTA so aparecia
+    // trocando de conversa e voltando (ou com F5) - o polling da lista ao
+    // lado nao recarrega o painel central sozinho.
+    const intervalo = setInterval(carregarAtiva, 3000)
+    return () => clearInterval(intervalo)
   }, [ativaId])
 
   const abrir = (id: string) => setAtivaId(id)
