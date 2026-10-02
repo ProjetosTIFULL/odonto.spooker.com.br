@@ -70,6 +70,7 @@ services:
       - api
     networks:
       - default
+      - spooker-net
 
 networks:
   default:
