@@ -31,16 +31,14 @@ function extensaoDeMime(mimeType: string): string {
  *
  * Devolve o caminho já pronto pro front usar direto num <img src> (o
  * mesmo prefixo /api que o resto da API usa, por causa do proxy do
- * Vite) - pro envio ao WhatsApp, urlInternaDaMidia() vira isso numa
- * URL completa que outros containers da rede compartilhada alcançam.
+ * Vite). O envio pro WhatsApp NAO usa essa URL - manda os bytes
+ * (base64) direto pra Evolution API, que recusa URL de containers
+ * fora da rede dela (erro real visto em producao: "Owned media must
+ * be a url or base64").
  */
 export async function salvarMidia(dataBase64: string, mimeType: string): Promise<{ caminhoRelativo: string; tipo: string }> {
   await mkdir(env.UPLOADS_DIR, { recursive: true })
   const nomeArquivo = `${randomUUID()}.${extensaoDeMime(mimeType)}`
   await writeFile(path.join(env.UPLOADS_DIR, nomeArquivo), Buffer.from(dataBase64, 'base64'))
   return { caminhoRelativo: `/api/uploads/${nomeArquivo}`, tipo: tipoDeMime(mimeType) }
-}
-
-export function urlInternaDaMidia(caminhoRelativo: string): string {
-  return `${env.INTERNAL_BASE_URL}${caminhoRelativo}`
 }

@@ -4,7 +4,7 @@ import { autenticar, EQUIPE_ATENDIMENTO, exigirPapel } from '../auth.ts'
 import { prisma } from '../db.ts'
 import { env } from '../env.ts'
 import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
-import { salvarMidia, urlInternaDaMidia } from '../lib/midia.ts'
+import { salvarMidia } from '../lib/midia.ts'
 
 // O recebimento (mensagem do paciente) chega pelo Orquestrador, que
 // espelha aqui via POST /mensagens/registrar no MCP (ver server/src/mcp/
@@ -31,7 +31,7 @@ async function enviarPeloWhatsApp(clinicaId: string, telefone: string, texto: st
 }
 
 async function enviarMidiaPeloWhatsApp(
-  clinicaId: string, telefone: string, caminhoRelativo: string, tipo: string, legenda?: string,
+  clinicaId: string, telefone: string, dataBase64: string, tipo: string, nomeArquivo: string, legenda?: string,
 ): Promise<ResultadoEnvio> {
   const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
   if (!clinica?.agentId) return { erro: 'Esta clínica ainda não tem um agente de WhatsApp vinculado.', whatsappId: null }
@@ -41,7 +41,7 @@ async function enviarMidiaPeloWhatsApp(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         agent_id: clinica.agentId, numero_whatsapp: telefone,
-        media_url: urlInternaDaMidia(caminhoRelativo), media_type: tipo, legenda: legenda ?? '',
+        media_base64: dataBase64, media_type: tipo, file_name: nomeArquivo, legenda: legenda ?? '',
       }),
     })
     const data = (await r.json()) as { erro?: string; whatsapp_id?: string | null }
@@ -131,14 +131,17 @@ export default async function conversasRoutes(app: FastifyInstance) {
   /** Envia foto/vídeo/documento pelo WhatsApp - arquivo em base64 no corpo (sem multipart, simples e suficiente pro tamanho típico de mídia de chat). */
   app.post('/:id/midia', async (req, reply) => {
     const { id } = idParams.parse(req.params)
-    const { dataBase64, mimeType, legenda } = z
-      .object({ dataBase64: z.string().min(1), mimeType: z.string().min(1), legenda: z.string().trim().max(1024).optional() })
+    const { dataBase64, mimeType, nomeArquivo, legenda } = z
+      .object({
+        dataBase64: z.string().min(1), mimeType: z.string().min(1),
+        nomeArquivo: z.string().trim().optional(), legenda: z.string().trim().max(1024).optional(),
+      })
       .parse(req.body)
     const clinicaId = req.user.clinicaId
     const conversa = await buscar(id, clinicaId)
 
     const { caminhoRelativo, tipo } = await salvarMidia(dataBase64, mimeType)
-    const { erro: erroEnvio, whatsappId } = await enviarMidiaPeloWhatsApp(clinicaId, conversa.telefone, caminhoRelativo, tipo, legenda)
+    const { erro: erroEnvio, whatsappId } = await enviarMidiaPeloWhatsApp(clinicaId, conversa.telefone, dataBase64, tipo, nomeArquivo || 'arquivo', legenda)
 
     const [mensagem] = await prisma.$transaction([
       prisma.mensagem.create({ data: { conversaId: id, de: 'CLINICA', texto: legenda, midiaUrl: caminhoRelativo, midiaTipo: tipo, whatsappId } }),

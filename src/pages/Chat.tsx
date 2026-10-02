@@ -171,7 +171,7 @@ export default function Chat() {
       const dataBase64 = await arquivoParaBase64(anexo.file)
       const m = await api<Mensagem>(`/conversas/${ativaId}/midia`, {
         method: 'POST',
-        body: { dataBase64, mimeType: anexo.file.type || 'application/octet-stream', legenda: texto.trim() || undefined },
+        body: { dataBase64, mimeType: anexo.file.type || 'application/octet-stream', nomeArquivo: anexo.file.name, legenda: texto.trim() || undefined },
       })
       setAtiva((a) => (a ? { ...a, mensagens: [...a.mensagens, m] } : a))
       carregarLista()
