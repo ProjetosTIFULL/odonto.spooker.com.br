@@ -51,6 +51,24 @@ async function enviarMidiaPeloWhatsApp(
   }
 }
 
+/**
+ * Busca a foto de perfil atual do WhatsApp - best-effort (undefined se
+ * nao foi possivel checar agora, pra nao apagar uma foto ja salva por
+ * causa de uma falha temporaria; null quando checou e a pessoa
+ * realmente nao tem foto).
+ */
+async function buscarFotoPerfil(clinicaId: string, telefone: string): Promise<string | null | undefined> {
+  const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
+  if (!clinica?.agentId) return undefined
+  try {
+    const r = await fetch(`${env.GATEWAY_URL}/orquestrador/foto_perfil?agent_id=${clinica.agentId}&numero_whatsapp=${encodeURIComponent(telefone)}`)
+    const data = (await r.json()) as { url?: string | null }
+    return data.url ?? null
+  } catch {
+    return undefined
+  }
+}
+
 export default async function conversasRoutes(app: FastifyInstance) {
   app.addHook('onRequest', autenticar)
   app.addHook('preHandler', exigirPapel(...EQUIPE_ATENDIMENTO))
@@ -99,13 +117,21 @@ export default async function conversasRoutes(app: FastifyInstance) {
     return reply.code(201).send(conversa)
   })
 
-  /** Mensagens da conversa; ao abrir, zera as não lidas. */
+  /**
+   * Mensagens da conversa; ao abrir, zera as não lidas. O front chama
+   * essa mesma rota tanto na abertura (1x) quanto no polling (a cada
+   * 3s, pra pegar mensagem nova) - so refaz a busca da foto de perfil
+   * na abertura de verdade (?atualizarFoto=1), senao a Evolution API
+   * levaria uma chamada a cada 3s por nada.
+   */
   app.get('/:id', async (req) => {
     const { id } = idParams.parse(req.params)
-    await buscar(id, req.user.clinicaId)
+    const { atualizarFoto } = z.object({ atualizarFoto: z.coerce.boolean().optional() }).parse(req.query)
+    const conversa = await buscar(id, req.user.clinicaId)
+    const fotoUrl = atualizarFoto ? await buscarFotoPerfil(req.user.clinicaId, conversa.telefone) : undefined
     return prisma.conversa.update({
       where: { id },
-      data: { naoLidas: 0 },
+      data: { naoLidas: 0, ...(fotoUrl !== undefined && { fotoUrl }) },
       include: {
         paciente: { select: { id: true, nome: true, convenio: true } },
         mensagens: { orderBy: { enviadaEm: 'asc' } },

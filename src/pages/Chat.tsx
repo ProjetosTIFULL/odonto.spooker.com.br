@@ -122,13 +122,14 @@ export default function Chat() {
 
   useEffect(() => {
     if (!ativaId) return
-    const carregarAtiva = () => api<ConversaDetalhe>(`/conversas/${ativaId}`).then(setAtiva)
-    carregarAtiva()
+    const carregarAtiva = (atualizarFoto = false) =>
+      api<ConversaDetalhe>(`/conversas/${ativaId}${atualizarFoto ? '?atualizarFoto=1' : ''}`).then(setAtiva)
+    carregarAtiva(true) // so na abertura de verdade busca a foto de perfil de novo (igual WhatsApp Web)
     // Sem isso, uma mensagem nova (ou status de entrega/leitura) chegando
     // na conversa JA ABERTA so aparecia trocando de conversa e voltando
     // (ou com F5) - o polling da lista ao lado nao recarrega o painel
     // central sozinho.
-    const intervalo = setInterval(carregarAtiva, 3000)
+    const intervalo = setInterval(() => carregarAtiva(false), 3000)
     return () => clearInterval(intervalo)
   }, [ativaId])
 
