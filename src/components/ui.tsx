@@ -20,7 +20,7 @@ export function StatusBadge({ status }: { status: StatusConsulta }) {
   return <span className={`badge badge-${status}`}>{statusLabel[status]}</span>
 }
 
-export function Avatar({ nome, cor }: { nome: string; cor?: string }) {
+export function Avatar({ nome, cor, fotoUrl }: { nome: string; cor?: string; fotoUrl?: string | null }) {
   const iniciais = nome
     .replace(/^Dra?\.\s+/, '')
     .split(' ')
@@ -28,6 +28,7 @@ export function Avatar({ nome, cor }: { nome: string; cor?: string }) {
     .slice(0, 2)
     .join('')
     .toUpperCase()
+  if (fotoUrl) return <img src={fotoUrl} alt={nome} className="avatar sm avatar-foto" />
   return (
     <span className="avatar sm" style={cor ? { background: cor } : undefined}>
       {iniciais}

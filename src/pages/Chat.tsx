@@ -17,6 +17,7 @@ type ConversaResumo = {
   id: string
   telefone: string
   nomeContato: string | null
+  fotoUrl: string | null
   naoLidas: number
   ultimaMensagemEm: string
   paciente: { id: string; nome: string; convenio: string | null } | null
@@ -207,7 +208,7 @@ export default function Chat() {
         <ul>
           {filtradas.map((c) => (
             <li key={c.id} className={`chat-item ${c.id === ativaId ? 'active' : ''}`} onClick={() => abrir(c.id)}>
-              <Avatar nome={nomeDaConversa(c)} />
+              <Avatar nome={nomeDaConversa(c)} fotoUrl={c.fotoUrl} />
               <div className="grow ellipsis">
                 <div className="row-between">
                   <strong>{nomeDaConversa(c)}</strong>
@@ -225,7 +226,7 @@ export default function Chat() {
 
       <section className="chat-main">
         <header className="chat-header">
-          <Avatar nome={nomeDaConversa(ativa)} />
+          <Avatar nome={nomeDaConversa(ativa)} fotoUrl={ativa.fotoUrl} />
           <div className="grow">
             <strong>{nomeDaConversa(ativa)}</strong>
             <small className="muted">{ativa.paciente ? `Paciente · ${ativa.paciente.convenio ?? 'particular'}` : 'Contato não cadastrado'}</small>

@@ -200,6 +200,7 @@ model Conversa {
   pacienteId      String?
   telefone        String
   nomeContato     String?
+  fotoUrl         String?
   naoLidas        Int       @default(0)
   ultimaMensagemEm DateTime @default(now())
 

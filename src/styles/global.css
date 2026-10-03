@@ -71,6 +71,7 @@ h1, h2 { margin: 0; }
 .icon-btn .dot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 .avatar { display: inline-grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 13px; font-weight: 600; }
 .avatar.sm { width: 34px; height: 34px; font-size: 12px; background: #8aa1ad; }
+.avatar-foto { object-fit: cover; }
 .only-mobile { display: none; }
 .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; }
 

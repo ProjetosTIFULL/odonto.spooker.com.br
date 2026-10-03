@@ -90,6 +90,17 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+/** Foto de perfil do WhatsApp do contato - best-effort, so busca na criacao da conversa (nunca refaz a cada mensagem). */
+async function buscarFotoPerfil(agentId: number, numeroWhatsapp: string): Promise<string | null> {
+  try {
+    const r = await fetch(`${env.GATEWAY_URL}/orquestrador/foto_perfil?agent_id=${agentId}&numero_whatsapp=${encodeURIComponent(numeroWhatsapp)}`)
+    const data = (await r.json()) as { url?: string | null }
+    return data.url ?? null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Acha (ou cria) a Conversa certa pra uma mensagem chegando/saindo,
  * religando ao Paciente se for o caso - usado tanto por /mensagens/
@@ -99,9 +110,11 @@ async function conversaParaMensagem(agentId: number, numeroWhatsapp: string, nom
   const clinicaId = await resolverClinicaId(agentId)
   const telefone = normalizarTelefone(numeroWhatsapp.split('@')[0])
   const paciente = await prisma.paciente.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone } } })
+  const jaExiste = await prisma.conversa.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone } } })
+  const fotoUrl = jaExiste ? undefined : await buscarFotoPerfil(agentId, numeroWhatsapp)
   const conversa = await prisma.conversa.upsert({
     where: { clinicaId_telefone: { clinicaId, telefone } },
-    create: { clinicaId, telefone, nomeContato, pacienteId: paciente?.id },
+    create: { clinicaId, telefone, nomeContato, pacienteId: paciente?.id, fotoUrl },
     update: {
       ultimaMensagemEm: new Date(),
       ...(remetente === 'PACIENTE' && { naoLidas: { increment: 1 } }),
