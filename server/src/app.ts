@@ -7,6 +7,7 @@ import { z, ZodError } from 'zod'
 import { env } from './env.ts'
 import { Prisma } from './generated/prisma/client.ts'
 import { HttpError } from './lib/http.ts'
+import agenteRoutes from './routes/agente.ts'
 import authRoutes from './routes/auth.ts'
 import clinicaRoutes from './routes/clinica.ts'
 import consultasRoutes from './routes/consultas.ts'
@@ -85,6 +86,7 @@ export async function buildApp() {
   await app.register(conversasRoutes, { prefix: '/api/conversas' })
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' })
   await app.register(whatsappRoutes, { prefix: '/api/whatsapp' })
+  await app.register(agenteRoutes, { prefix: '/api/agente' })
 
   return app
 }

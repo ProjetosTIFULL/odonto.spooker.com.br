@@ -11,7 +11,7 @@ import { prisma } from '../db.ts'
 import { env } from '../env.ts'
 import { HttpError } from '../lib/http.ts'
 
-async function agentIdDaClinica(clinicaId: string): Promise<number> {
+export async function agentIdDaClinica(clinicaId: string): Promise<number> {
   const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
   if (!clinica?.agentId) {
     throw new HttpError(400, 'Esta clínica ainda não tem um agente de IA/WhatsApp vinculado. Fale com o suporte Spooker.')
