@@ -358,9 +358,15 @@ button.avatar { border: 0; cursor: pointer; }
 .matriz th:not(:first-child) { text-align: center; }
 .text-success { color: var(--success); }
 .tag { text-transform: none; }
+.google-conectado { display: inline-flex; align-items: center; gap: 4px; color: var(--success); font-weight: 600; font-size: 13px; }
+.link-btn { background: none; border: none; padding: 0; color: var(--primary); font-size: 12px; text-align: left; cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.link-btn:disabled { opacity: .5; cursor: default; text-decoration: none; }
 
 /* ---------- Agenda ligada à API ---------- */
-.alerta { background: #fff4e0; border: 1px solid #f5d39a; color: #7a4b00; border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.alerta { background: #fff4e0; border: 1px solid #f5d39a; color: #7a4b00; border-radius: 8px; padding: 10px 14px; font-size: 14px; margin-bottom: 16px; }
+.alerta-sucesso { background: #e7f7ee; border-color: #a7e0c1; color: #146c3a; }
+.alerta-erro { background: #fdeaea; border-color: #f2b8b8; color: #99201f; }
 .minha-agenda { display: inline-flex; align-items: center; height: 38px; padding: 0 12px; border-radius: 8px; background: var(--primary-50); color: var(--primary); font-weight: 600; font-size: 14px; }
 
 /* ---------- Dashboard: abas, seções ---------- */

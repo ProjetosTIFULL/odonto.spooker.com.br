@@ -4,6 +4,7 @@ import { agendaRestrita, autenticar } from '../auth.ts'
 import { prisma } from '../db.ts'
 import { HttpError, idParams, naoEncontrado } from '../lib/http.ts'
 import { addDias, emHorario, fmtDataHora, hojeISO, inicioDoDia } from '../lib/tempo.ts'
+import { removerEventoGoogleAoExcluir, sincronizarConsultaComGoogle } from '../lib/syncGoogle.ts'
 
 /** Status que podem ser definidos diretamente. REMARCADA só via POST /:id/remarcar (que cria a nova consulta). */
 const STATUS = ['AGENDADA', 'CONFIRMADA', 'EM_ATENDIMENTO', 'CONCLUIDA', 'FALTOU', 'CANCELADA'] as const
@@ -168,6 +169,7 @@ export default async function consultasRoutes(app: FastifyInstance) {
       data: { ...d, fim, clinicaId, valor: d.valor ?? proc?.valor ?? null },
       include: incluir,
     })
+    await sincronizarConsultaComGoogle(criada.id)
     return reply.code(201).send(criada)
   })
 
@@ -199,7 +201,9 @@ export default async function consultasRoutes(app: FastifyInstance) {
       await verificarConflito(d.profissionalId ?? atual.profissionalId, inicio, fim, id)
     }
 
-    return prisma.consulta.update({ where: { id }, data: { ...d, inicio, fim }, include: incluir })
+    const atualizada = await prisma.consulta.update({ where: { id }, data: { ...d, inicio, fim }, include: incluir })
+    await sincronizarConsultaComGoogle(id)
+    return atualizada
   })
 
   /**
@@ -244,6 +248,7 @@ export default async function consultasRoutes(app: FastifyInstance) {
         include: incluir,
       }),
     ])
+    await Promise.all([sincronizarConsultaComGoogle(anterior.id), sincronizarConsultaComGoogle(nova.id)])
     return reply.code(201).send({ anterior, nova })
   })
 
@@ -271,13 +276,16 @@ export default async function consultasRoutes(app: FastifyInstance) {
     const { status } = z.object({ status: z.enum(STATUS) }).parse(req.body)
     const { count } = await prisma.consulta.updateMany({ where: { id, ...escopo(req) }, data: { status } })
     if (!count) throw naoEncontrado('Consulta')
+    await sincronizarConsultaComGoogle(id)
     return prisma.consulta.findUniqueOrThrow({ where: { id }, include: incluir })
   })
 
   app.delete('/:id', async (req, reply) => {
     const { id } = idParams.parse(req.params)
-    const { count } = await prisma.consulta.deleteMany({ where: { id, ...escopo(req) } })
-    if (!count) throw naoEncontrado('Consulta')
+    const existente = await prisma.consulta.findFirst({ where: { id, ...escopo(req) } })
+    if (!existente) throw naoEncontrado('Consulta')
+    await removerEventoGoogleAoExcluir(id) // lê os dados antes de apagar a linha
+    await prisma.consulta.delete({ where: { id } })
     return reply.code(204).send()
   })
 }

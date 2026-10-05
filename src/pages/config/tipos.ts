@@ -11,6 +11,8 @@ export type Colaborador = {
   cor: string
   ativo: boolean
   usuario?: { id: string; email: string; papel: Papel; ativo: boolean } | null
+  googleEmail: string | null
+  googleConectadoEm: string | null
 }
 
 export type UsuarioClinica = {

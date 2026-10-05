@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { KeyRound, Pencil, Plus } from 'lucide-react'
+import { CalendarCheck2, KeyRound, Pencil, Plus } from 'lucide-react'
+import { useUsuario } from '../../auth/AuthContext'
 import { FUNCAO_LABEL, PAPEL_LABEL, type FuncaoColaborador } from '../../auth/permissoes'
 import { Avatar, Card, Modal } from '../../components/ui'
 import { api } from '../../lib/api'
@@ -9,16 +10,45 @@ import { UsuarioModal } from './Usuarios'
 type Filtro = 'todos' | FuncaoColaborador
 
 export default function Colaboradores() {
+  const usuario = useUsuario()
   const [lista, setLista] = useState<Colaborador[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [editando, setEditando] = useState<Colaborador | 'novo' | null>(null)
   const [criandoLogin, setCriandoLogin] = useState<Colaborador | null>(null)
+  const [mexendoGoogle, setMexendoGoogle] = useState<string | null>(null)
 
   const carregar = useCallback(() => {
     api<Colaborador[]>('/profissionais?todos=true').then(setLista).catch((e) => setErro(e.message))
   }, [])
   useEffect(carregar, [carregar])
+
+  /** ADMIN mexe na agenda de qualquer dentista; o próprio dentista só na dele. */
+  const podeMexerGoogle = (c: Colaborador) => usuario.papel === 'ADMIN' || usuario.profissional?.id === c.id
+
+  const conectarGoogle = async (c: Colaborador) => {
+    setMexendoGoogle(c.id)
+    try {
+      const { url } = await api<{ url: string }>(`/google/conectar/${c.id}`)
+      window.location.href = url
+    } catch (e) {
+      setErro((e as Error).message)
+      setMexendoGoogle(null)
+    }
+  }
+
+  const desconectarGoogle = async (c: Colaborador) => {
+    if (!confirm(`Desconectar a Google Agenda de ${c.nome}? As consultas vão continuar só no Portal.`)) return
+    setMexendoGoogle(c.id)
+    try {
+      await api(`/google/desconectar/${c.id}`, { method: 'POST' })
+      carregar()
+    } catch (e) {
+      setErro((e as Error).message)
+    } finally {
+      setMexendoGoogle(null)
+    }
+  }
 
   const visiveis = lista.filter((c) => filtro === 'todos' || c.funcao === filtro)
 
@@ -50,6 +80,7 @@ export default function Colaboradores() {
               <th>Função</th>
               <th>Contato</th>
               <th>Acesso ao sistema</th>
+              <th>Agenda Google</th>
               <th />
             </tr>
           </thead>
@@ -82,6 +113,27 @@ export default function Colaboradores() {
                     <span className="muted">Sem login</span>
                   )}
                 </td>
+                <td>
+                  {c.funcao !== 'DENTISTA' ? (
+                    <span className="muted">—</span>
+                  ) : c.googleEmail ? (
+                    <div className="cell-stack">
+                      <span className="google-conectado"><CalendarCheck2 size={14} /> Conectado</span>
+                      <small className="muted">{c.googleEmail}</small>
+                      {podeMexerGoogle(c) && (
+                        <button type="button" className="link-btn small" disabled={mexendoGoogle === c.id} onClick={() => desconectarGoogle(c)}>
+                          Desconectar
+                        </button>
+                      )}
+                    </div>
+                  ) : podeMexerGoogle(c) ? (
+                    <button type="button" className="btn btn-ghost btn-sm" disabled={mexendoGoogle === c.id} onClick={() => conectarGoogle(c)}>
+                      {mexendoGoogle === c.id ? 'Abrindo...' : 'Conectar'}
+                    </button>
+                  ) : (
+                    <span className="muted">Não conectada</span>
+                  )}
+                </td>
                 <td className="cell-actions">
                   {!c.usuario && c.ativo && (
                     <button className="icon-btn" title="Criar login para este colaborador" onClick={() => setCriandoLogin(c)}>
@@ -93,7 +145,7 @@ export default function Colaboradores() {
               </tr>
             ))}
             {visiveis.length === 0 && (
-              <tr><td colSpan={5} className="empty">Nenhum colaborador.</td></tr>
+              <tr><td colSpan={6} className="empty">Nenhum colaborador.</td></tr>
             )}
           </tbody>
         </table>

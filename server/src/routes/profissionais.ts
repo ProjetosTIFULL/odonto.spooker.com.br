@@ -25,7 +25,17 @@ const listQuery = z.object({
   funcao: z.enum(FUNCOES).optional(),
 })
 
-const incluir = { usuario: { select: { id: true, email: true, papel: true, ativo: true } } } as const
+/**
+ * Campos públicos do colaborador - nunca inclui googleRefreshTokenCriptografado
+ * (mesmo criptografado, não tem por que esse blob sair da API).
+ * googleEmail/googleConectadoEm são só pra mostrar "conectado como fulano@gmail.com" na tela.
+ */
+const campos = {
+  id: true, nome: true, funcao: true, especialidade: true, cro: true,
+  telefone: true, email: true, cor: true, ativo: true,
+  googleEmail: true, googleConectadoEm: true,
+} as const
+const usuarioSelect = { usuario: { select: { id: true, email: true, papel: true, ativo: true } } } as const
 
 export default async function profissionaisRoutes(app: FastifyInstance) {
   app.addHook('onRequest', autenticar)
@@ -36,13 +46,13 @@ export default async function profissionaisRoutes(app: FastifyInstance) {
       where: { clinicaId: req.user.clinicaId, ...(todos ? {} : { ativo: true }), ...(funcao && { funcao }) },
       orderBy: [{ funcao: 'asc' }, { nome: 'asc' }],
       // Login vinculado só interessa a quem administra
-      ...(req.user.papel === 'ADMIN' && { include: incluir }),
+      select: { ...campos, ...(req.user.papel === 'ADMIN' && usuarioSelect) },
     })
   })
 
   app.post('/', { preHandler: exigirPapel('ADMIN') }, async (req, reply) => {
     const data = body.parse(req.body)
-    const criado = await prisma.profissional.create({ data: { ...data, clinicaId: req.user.clinicaId }, include: incluir })
+    const criado = await prisma.profissional.create({ data: { ...data, clinicaId: req.user.clinicaId }, select: { ...campos, ...usuarioSelect } })
     return reply.code(201).send(criado)
   })
 
@@ -53,7 +63,7 @@ export default async function profissionaisRoutes(app: FastifyInstance) {
       data: body.partial().parse(req.body),
     })
     if (!count) throw naoEncontrado('Colaborador')
-    return prisma.profissional.findUniqueOrThrow({ where: { id }, include: incluir })
+    return prisma.profissional.findUniqueOrThrow({ where: { id }, select: { ...campos, ...usuarioSelect } })
   })
 
   /** Não apaga (há consultas ligadas): apenas desativa. */

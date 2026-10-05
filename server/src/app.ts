@@ -9,6 +9,7 @@ import { Prisma } from './generated/prisma/client.ts'
 import { HttpError } from './lib/http.ts'
 import agenteRoutes from './routes/agente.ts'
 import authRoutes from './routes/auth.ts'
+import googleRoutes from './routes/google.ts'
 import clinicaRoutes from './routes/clinica.ts'
 import consultasRoutes from './routes/consultas.ts'
 import conversasRoutes from './routes/conversas.ts'
@@ -87,6 +88,7 @@ export async function buildApp() {
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' })
   await app.register(whatsappRoutes, { prefix: '/api/whatsapp' })
   await app.register(agenteRoutes, { prefix: '/api/agente' })
+  await app.register(googleRoutes, { prefix: '/api/google' })
 
   return app
 }

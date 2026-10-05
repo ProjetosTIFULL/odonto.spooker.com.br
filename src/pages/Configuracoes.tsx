@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Bell, Bot, Building2, Clock, CreditCard, MessageCircle, ShieldCheck, Stethoscope, Users } from 'lucide-react'
 import { Card, Placeholder } from '../components/ui'
+import { avisoConexaoGoogle } from './config/avisoGoogle'
 import Colaboradores from './config/Colaboradores'
 import DadosClinica from './config/DadosClinica'
 import Horarios from './config/Horarios'
@@ -25,7 +26,8 @@ const SECOES = [
 type SecaoId = (typeof SECOES)[number]['id']
 
 export default function Configuracoes() {
-  const [secao, setSecao] = useState<SecaoId>('clinica')
+  const [aviso] = useState(avisoConexaoGoogle)
+  const [secao, setSecao] = useState<SecaoId>(aviso ? 'profissionais' : 'clinica')
 
   return (
     <div className="settings">
@@ -36,7 +38,10 @@ export default function Configuracoes() {
           </button>
         ))}
       </nav>
-      <div className="settings-body">{render(secao)}</div>
+      <div className="settings-body">
+        {aviso && <p className={`alerta ${aviso.tipo === 'erro' ? 'alerta-erro' : 'alerta-sucesso'}`}>{aviso.texto}</p>}
+        {render(secao)}
+      </div>
     </div>
   )
 }

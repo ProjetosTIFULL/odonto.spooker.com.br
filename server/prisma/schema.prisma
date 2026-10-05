@@ -135,6 +135,13 @@ model Profissional {
   cor           String            @default("#0e7c86")
   ativo         Boolean           @default(true)
 
+  /// Agenda Google conectada (opcional, por profissional) - so preenchido
+  /// depois que ele mesmo autoriza via OAuth. refreshToken fica
+  /// criptografado (nunca em texto puro no banco).
+  googleEmail                      String?
+  googleRefreshTokenCriptografado  String?
+  googleConectadoEm                DateTime?
+
   clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   usuario   Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   consultas Consulta[]
@@ -199,6 +206,8 @@ model Consulta {
   confirmacaoEnviada        Boolean @default(false)
   lembreteDiaEnviado        Boolean @default(false)
   pesquisaSatisfacaoEnviada Boolean @default(false)
+  /// Id do evento criado na Google Agenda do profissional (se ele tiver conectado) - usado pra atualizar/excluir o evento depois.
+  googleEventId             String?
 
   clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
