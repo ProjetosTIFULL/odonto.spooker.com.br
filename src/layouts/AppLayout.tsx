@@ -4,6 +4,7 @@ import { Bell, LogOut, Menu, Search } from 'lucide-react'
 import Sidebar from '../components/Sidebar'
 import { useAuth, useUsuario } from '../auth/AuthContext'
 import { PAPEL_LABEL, podeAcessar } from '../auth/permissoes'
+import { api } from '../lib/api'
 
 const TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -32,12 +33,27 @@ export default function AppLayout() {
   // Busca global procura pacientes: só para quem acessa Clientes
   const mostraBusca = podeAcessar(usuario.papel, 'clientes')
   const [textoBusca, setTextoBusca] = useState('')
+  const mostraNotificacoes = podeAcessar(usuario.papel, 'chat')
+  const [naoLidas, setNaoLidas] = useState(0)
 
   const buscar = (e: React.FormEvent) => {
     e.preventDefault()
     if (!textoBusca.trim()) return
     navigate(`/clientes?busca=${encodeURIComponent(textoBusca.trim())}`)
   }
+
+  // Notificação = mensagens de WhatsApp ainda não lidas no Chat (único tipo de
+  // notificação que já existe de verdade no sistema hoje).
+  useEffect(() => {
+    if (!mostraNotificacoes) return
+    const carregar = () =>
+      api<{ naoLidas: number }[]>('/conversas')
+        .then((cs) => setNaoLidas(cs.reduce((soma, c) => soma + c.naoLidas, 0)))
+        .catch(() => {})
+    carregar()
+    const t = setInterval(carregar, 15000)
+    return () => clearInterval(t)
+  }, [mostraNotificacoes])
 
   return (
     <div className={`app ${collapsed ? 'is-collapsed' : ''}`}>
@@ -65,10 +81,17 @@ export default function AppLayout() {
               />
             </form>
           )}
-          <button className="icon-btn" aria-label="Notificações">
-            <Bell size={20} />
-            <span className="dot" />
-          </button>
+          {mostraNotificacoes && (
+            <button
+              className="icon-btn"
+              aria-label={naoLidas > 0 ? `${naoLidas} mensagem(ns) não lida(s)` : 'Nenhuma mensagem nova'}
+              title="Ir para o Chat"
+              onClick={() => navigate('/chat')}
+            >
+              <Bell size={20} />
+              {naoLidas > 0 && <span className="dot" />}
+            </button>
+          )}
           <MenuUsuario />
         </header>
 
