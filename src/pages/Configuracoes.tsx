@@ -4,6 +4,7 @@ import { Card, Placeholder } from '../components/ui'
 import Colaboradores from './config/Colaboradores'
 import DadosClinica from './config/DadosClinica'
 import Horarios from './config/Horarios'
+import Lembretes from './config/Lembretes'
 import McpAgente from './config/McpAgente'
 import Procedimentos from './config/Procedimentos'
 import Usuarios from './config/Usuarios'
@@ -54,17 +55,7 @@ function render(secao: SecaoId) {
     case 'mcp':
       return <McpAgente />
     case 'notificacoes':
-      return (
-        <Card title="Lembretes automáticos">
-          <Placeholder items={[
-            'Confirmação de consulta 24h antes (com resposta SIM/NÃO atualizando a agenda)',
-            'Lembrete no dia da consulta',
-            'Mensagem pós-atendimento / pesquisa de satisfação',
-            'Parabéns de aniversário',
-            'Campanha de retorno (pacientes sem visita há X meses)',
-          ]} />
-        </Card>
-      )
+      return <Lembretes />
     case 'procedimentos':
       return <Procedimentos />
     case 'usuarios':

@@ -5,6 +5,7 @@ import { prisma } from '../db.ts'
 import { env } from '../env.ts'
 import { idParams, naoEncontrado, normalizarTelefone } from '../lib/http.ts'
 import { salvarMidia } from '../lib/midia.ts'
+import { enviarMidiaPeloWhatsApp, enviarPeloWhatsApp } from '../lib/whatsapp.ts'
 
 // O recebimento (mensagem do paciente) chega pelo Orquestrador, que
 // espelha aqui via POST /mensagens/registrar no MCP (ver server/src/mcp/
@@ -12,44 +13,6 @@ import { salvarMidia } from '../lib/midia.ts'
 // verdade pelo WhatsApp chamando o api-gateway do Orquestrador direto -
 // best-effort: se falhar, a mensagem fica salva aqui mas nao conseguiu
 // sair, e avisamos o atendente.
-type ResultadoEnvio = { erro: string | null; whatsappId: string | null }
-
-async function enviarPeloWhatsApp(clinicaId: string, telefone: string, texto: string): Promise<ResultadoEnvio> {
-  const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
-  if (!clinica?.agentId) return { erro: 'Esta clínica ainda não tem um agente de WhatsApp vinculado.', whatsappId: null }
-  try {
-    const r = await fetch(`${env.GATEWAY_URL}/orquestrador/enviar_mensagem_direta`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ agent_id: clinica.agentId, numero_whatsapp: telefone, texto }),
-    })
-    const data = (await r.json()) as { erro?: string; whatsapp_id?: string | null }
-    return { erro: data.erro ?? null, whatsappId: data.whatsapp_id ?? null }
-  } catch {
-    return { erro: 'Não foi possível falar com o WhatsApp agora.', whatsappId: null }
-  }
-}
-
-async function enviarMidiaPeloWhatsApp(
-  clinicaId: string, telefone: string, dataBase64: string, tipo: string, nomeArquivo: string, legenda?: string,
-): Promise<ResultadoEnvio> {
-  const clinica = await prisma.clinica.findUnique({ where: { id: clinicaId }, select: { agentId: true } })
-  if (!clinica?.agentId) return { erro: 'Esta clínica ainda não tem um agente de WhatsApp vinculado.', whatsappId: null }
-  try {
-    const r = await fetch(`${env.GATEWAY_URL}/orquestrador/enviar_midia_direta`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        agent_id: clinica.agentId, numero_whatsapp: telefone,
-        media_base64: dataBase64, media_type: tipo, file_name: nomeArquivo, legenda: legenda ?? '',
-      }),
-    })
-    const data = (await r.json()) as { erro?: string; whatsapp_id?: string | null }
-    return { erro: data.erro ?? null, whatsappId: data.whatsapp_id ?? null }
-  } catch {
-    return { erro: 'Não foi possível falar com o WhatsApp agora.', whatsappId: null }
-  }
-}
 
 /**
  * Busca a foto de perfil atual do WhatsApp - best-effort (undefined se

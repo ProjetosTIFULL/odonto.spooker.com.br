@@ -272,6 +272,9 @@ small { font-size: 12.5px; color: var(--muted); }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
 .span-2 { grid-column: span 2; }
 .check { display: flex; align-items: center; gap: 8px; }
+.lembrete-item { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; }
+.lembrete-item .check { font-size: 14px; }
+.lembrete-item .textarea { margin-top: 2px; }
 .wpp-status { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); }
 .status-dot.off { background: var(--danger); }

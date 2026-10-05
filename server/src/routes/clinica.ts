@@ -16,6 +16,20 @@ const clinicaBody = z
   })
   .partial()
 
+const lembretesBody = z.object({
+  lembreteConfirmacao24hAtivo: z.boolean(),
+  lembreteConfirmacao24hMensagem: z.string().min(1).max(1000),
+  lembreteDiaConsultaAtivo: z.boolean(),
+  lembreteDiaConsultaMensagem: z.string().min(1).max(1000),
+  lembreteAniversarioAtivo: z.boolean(),
+  lembreteAniversarioMensagem: z.string().min(1).max(1000),
+  lembreteRetornoAtivo: z.boolean(),
+  lembreteRetornoMensagem: z.string().min(1).max(1000),
+  lembreteRetornoMesesLimite: z.coerce.number().int().min(1).max(36),
+  lembretePesquisaSatisfacaoAtivo: z.boolean(),
+  lembretePesquisaSatisfacaoMensagem: z.string().min(1).max(1000),
+})
+
 const horariosBody = z
   .array(
     z.object({
@@ -55,4 +69,23 @@ export default async function clinicaRoutes(app: FastifyInstance) {
     )
     return prisma.horarioAtendimento.findMany({ where: { clinicaId }, orderBy: { diaSemana: 'asc' } })
   })
+
+  app.get('/lembretes', async (req) => {
+    const c = await prisma.clinica.findUniqueOrThrow({
+      where: { id: req.user.clinicaId },
+      select: {
+        lembreteConfirmacao24hAtivo: true, lembreteConfirmacao24hMensagem: true,
+        lembreteDiaConsultaAtivo: true, lembreteDiaConsultaMensagem: true,
+        lembreteAniversarioAtivo: true, lembreteAniversarioMensagem: true,
+        lembreteRetornoAtivo: true, lembreteRetornoMensagem: true, lembreteRetornoMesesLimite: true,
+        lembretePesquisaSatisfacaoAtivo: true, lembretePesquisaSatisfacaoMensagem: true,
+      },
+    })
+    return c
+  })
+
+  /** Liga/desliga cada lembrete automático e edita a mensagem - só ADMIN, já que isso passa a mandar mensagem pro paciente sozinho. */
+  app.put('/lembretes', { preHandler: exigirPapel('ADMIN') }, async (req) =>
+    prisma.clinica.update({ where: { id: req.user.clinicaId }, data: lembretesBody.parse(req.body) }),
+  )
 }
