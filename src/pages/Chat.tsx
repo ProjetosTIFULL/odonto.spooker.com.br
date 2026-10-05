@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Check, CheckCheck, Clock, FileText, Paperclip, Search, Send, X, Zap } from 'lucide-react'
 import { Avatar } from '../components/ui'
 import { api } from '../lib/api'
@@ -95,8 +96,10 @@ function ConteudoMensagem({ m }: { m: Mensagem }) {
 }
 
 export default function Chat() {
+  const [params, setParams] = useSearchParams()
   const [conversas, setConversas] = useState<ConversaResumo[]>([])
-  const [ativaId, setAtivaId] = useState<string | null>(null)
+  // Veio de "Conversar no WhatsApp" (tela de Clientes) com a conversa já criada - abre ela direto.
+  const [ativaId, setAtivaId] = useState<string | null>(params.get('conversa'))
   const [ativa, setAtiva] = useState<ConversaDetalhe | null>(null)
   const [texto, setTexto] = useState('')
   const [busca, setBusca] = useState('')
@@ -119,6 +122,10 @@ export default function Chat() {
     intervaloLista.current = setInterval(carregarLista, 5000) // pega conversa nova chegando pelo WhatsApp
     return () => clearInterval(intervaloLista.current)
   }, [])
+
+  useEffect(() => {
+    if (params.get('conversa')) setParams({}, { replace: true })
+  }, [params, setParams])
 
   useEffect(() => {
     if (!ativaId) return

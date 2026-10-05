@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, LogOut, Menu, Search } from 'lucide-react'
 import Sidebar from '../components/Sidebar'
 import { useAuth, useUsuario } from '../auth/AuthContext'
@@ -27,9 +27,17 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const usuario = useUsuario()
   // Busca global procura pacientes: só para quem acessa Clientes
   const mostraBusca = podeAcessar(usuario.papel, 'clientes')
+  const [textoBusca, setTextoBusca] = useState('')
+
+  const buscar = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!textoBusca.trim()) return
+    navigate(`/clientes?busca=${encodeURIComponent(textoBusca.trim())}`)
+  }
 
   return (
     <div className={`app ${collapsed ? 'is-collapsed' : ''}`}>
@@ -48,10 +56,14 @@ export default function AppLayout() {
           </button>
           <h1 className="topbar-title">{TITLES[pathname] ?? ''}</h1>
           {mostraBusca && (
-            <div className="topbar-search">
+            <form className="topbar-search" onSubmit={buscar}>
               <Search size={16} />
-              <input placeholder="Buscar paciente, telefone, CPF..." />
-            </div>
+              <input
+                placeholder="Buscar paciente, telefone, CPF..."
+                value={textoBusca}
+                onChange={(e) => setTextoBusca(e.target.value)}
+              />
+            </form>
           )}
           <button className="icon-btn" aria-label="Notificações">
             <Bell size={20} />
