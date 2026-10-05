@@ -53,6 +53,21 @@ export default function Rotina() {
   const [erro, setErro] = useState<string | null>(null)
   const [baixa, setBaixa] = useState<ConsultaResumo | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [enviandoParabens, setEnviandoParabens] = useState<string | null>(null)
+
+  const enviarParabens = async (p: { id: string; nome: string; telefone: string }) => {
+    setEnviandoParabens(p.id)
+    try {
+      const conversa = await api<{ id: string }>('/conversas', { method: 'POST', body: { telefone: p.telefone, nomeContato: p.nome } })
+      const texto = `Parabéns, ${p.nome.split(' ')[0]}! 🎉 A equipe deseja a você um dia maravilhoso e um ano repleto de saúde e sorrisos!`
+      const r = await api<{ avisoEnvio: string | null }>(`/conversas/${conversa.id}/mensagens`, { method: 'POST', body: { texto } })
+      setAviso(r.avisoEnvio ? `Não foi possível enviar pra ${p.nome}: ${r.avisoEnvio}` : `Mensagem de parabéns enviada para ${p.nome}.`)
+    } catch (e) {
+      setAviso((e as Error).message)
+    } finally {
+      setEnviandoParabens(null)
+    }
+  }
 
   const carregar = useCallback(() => {
     api<RotinaApi>('/dashboard/rotina').then(setD).catch((e) => setErro(e.message))
@@ -156,7 +171,13 @@ export default function Rotina() {
                   <strong>{p.nome}</strong>
                   <small>{p.nascimento.slice(8, 10)}/{p.nascimento.slice(5, 7)}</small>
                 </div>
-                <button className="btn btn-ghost btn-sm">Enviar parabéns</button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={enviandoParabens === p.id}
+                  onClick={() => enviarParabens(p)}
+                >
+                  {enviandoParabens === p.id ? 'Enviando...' : 'Enviar parabéns'}
+                </button>
               </li>
             ))}
           </ul>
