@@ -26,6 +26,11 @@ services:
       PORT: 3333
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5180}
       GATEWAY_URL: http://api-gateway:8200
+      # Protege o refresh_token da Google Agenda guardado no banco. Gerar com "openssl rand -hex 32".
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?defina ENCRYPTION_KEY no .env antes de subir}
+      # Credenciais OAuth do Google Cloud Console (Google Calendar API) - vazio = integração desligada.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       - '127.0.0.1:3333:3333'
     volumes:
