@@ -65,6 +65,19 @@ function criarServidor() {
   )
 
   server.tool(
+    'confirmar_ou_cancelar_consulta',
+    'Use isso SEMPRE que o paciente responder ao lembrete automático de confirmação de consulta (ex: "confirma sua ' +
+      'consulta amanhã às 14h? Responda SIM ou NÃO") - se ele disser algo equivalente a "sim"/"confirmo", chame com ' +
+      'acao="confirmar"; se disser "não"/"não posso ir", chame com acao="cancelar". Age sempre na consulta futura ' +
+      'mais próxima desse paciente, identificado automaticamente pelo numero_whatsapp (não peça o telefone). Se a ' +
+      'resposta do paciente não tiver relação nenhuma com confirmar/cancelar uma consulta (ou mencionar algo que ' +
+      'você não tem como saber, como um combinado feito direto com a dentista fora do sistema), NÃO chame esta ' +
+      'ferramenta e NÃO tente adivinhar - responda que vai verificar com a equipe, ou use escalar_para_humano.',
+    { agent_id: z.number(), numero_whatsapp: z.string(), acao: z.enum(['confirmar', 'cancelar']) },
+    async (args) => resultadoJson(await tools.confirmarOuCancelarConsulta(args)),
+  )
+
+  server.tool(
     'buscar_item_catalogo',
     'Busca um procedimento do catálogo pelo nome, para responder dúvida de preço/informação.',
     { agent_id: z.number(), busca: z.string() },

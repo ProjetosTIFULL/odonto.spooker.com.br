@@ -10,6 +10,7 @@
 
 import { prisma } from '../db.ts'
 import { normalizarTelefone } from '../lib/http.ts'
+import { sincronizarConsultaComGoogle } from '../lib/syncGoogle.ts'
 import { emHorario } from '../lib/tempo.ts'
 
 const OCUPAM = ['AGENDADA', 'CONFIRMADA', 'EM_ATENDIMENTO', 'CONCLUIDA'] as const
@@ -137,6 +138,44 @@ export async function agendarConsulta(args: {
       data: { clinicaId, pacienteId: paciente.id, profissionalId, inicio, fim, observacoes: args.tipo_consulta || null },
     })
     return { status: 'agendado', consulta_id: consulta.id, inicio: consulta.inicio.toISOString() }
+  } catch (e) {
+    if (e instanceof ErroFerramenta) return { erro: e.message }
+    throw e
+  }
+}
+
+/**
+ * Confirma ou cancela a PRÓXIMA consulta futura do paciente que está
+ * mandando a mensagem - usado quando ele responde ao lembrete automático
+ * de confirmação ("confirma sua consulta amanhã às 14h?"). Sempre age só
+ * na consulta mais próxima (AGENDADA ou já CONFIRMADA) - nunca numa
+ * consulta antiga ou mais distante no tempo, pra não arriscar mexer na
+ * errada se o paciente tiver mais de uma marcada.
+ */
+export async function confirmarOuCancelarConsulta(args: {
+  agent_id: number
+  numero_whatsapp: string
+  acao: 'confirmar' | 'cancelar'
+}) {
+  try {
+    const clinicaId = await resolverClinicaId(args.agent_id)
+    const telefone = normalizarTelefone((args.numero_whatsapp || '').split('@')[0])
+    if (!telefone) return { erro: 'numero_whatsapp inválido' }
+
+    const paciente = await prisma.paciente.findUnique({ where: { clinicaId_telefone: { clinicaId, telefone } } })
+    if (!paciente) return { erro: 'Não encontrei nenhum cadastro de paciente com esse número.' }
+
+    const consulta = await prisma.consulta.findFirst({
+      where: { clinicaId, pacienteId: paciente.id, status: { in: ['AGENDADA', 'CONFIRMADA'] }, inicio: { gt: new Date() } },
+      orderBy: { inicio: 'asc' },
+    })
+    if (!consulta) return { erro: 'Não encontrei nenhuma consulta futura marcada para esse paciente.' }
+
+    const novoStatus = args.acao === 'confirmar' ? 'CONFIRMADA' : 'CANCELADA'
+    await prisma.consulta.update({ where: { id: consulta.id }, data: { status: novoStatus, confirmacaoEnviada: true } })
+    await sincronizarConsultaComGoogle(consulta.id)
+
+    return { status: novoStatus.toLowerCase(), consulta_id: consulta.id, inicio: consulta.inicio.toISOString() }
   } catch (e) {
     if (e instanceof ErroFerramenta) return { erro: e.message }
     throw e
