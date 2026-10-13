@@ -35,6 +35,18 @@ async function resolverProfissionalId(clinicaId: string, profissionalId?: string
   return ativos[0].id
 }
 
+const DIA_SEMANA_NOME = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+
+export async function horarioDeAtendimento(args: { agent_id: number }) {
+  const clinicaId = await resolverClinicaId(args.agent_id)
+  const horarios = await prisma.horarioAtendimento.findMany({ where: { clinicaId }, orderBy: { diaSemana: 'asc' } })
+  return horarios.map((h) => ({
+    dia: DIA_SEMANA_NOME[h.diaSemana],
+    aberto: h.ativo,
+    ...(h.ativo && { abre: h.abre, fecha: h.fecha }),
+  }))
+}
+
 export async function listarProfissionais(args: { agent_id: number }) {
   const clinicaId = await resolverClinicaId(args.agent_id)
   const profissionais = await prisma.profissional.findMany({

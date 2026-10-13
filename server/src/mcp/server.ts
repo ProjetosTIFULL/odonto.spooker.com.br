@@ -29,6 +29,15 @@ function criarServidor() {
   )
 
   server.tool(
+    'horario_de_atendimento',
+    'Retorna o horário de funcionamento da clínica por dia da semana (quando pergumtarem "que horas vocês abrem", ' +
+      '"funciona aos sábados", etc). Isso é o horário GERAL da clínica, diferente de buscar_horarios_disponiveis ' +
+      '(que são os horários livres de um dentista específico num dia específico para marcar consulta).',
+    { agent_id: z.number() },
+    async (args) => resultadoJson(await tools.horarioDeAtendimento(args)),
+  )
+
+  server.tool(
     'buscar_horarios_disponiveis',
     "Retorna horários livres de um dentista num dia (formato AAAA-MM-DD). periodo é opcional: 'manha', 'tarde' ou " +
       'noite\'. ATENÇÃO: isso só CONSULTA a agenda, não marca nada. Ver um horário aqui NÃO significa que a ' +
