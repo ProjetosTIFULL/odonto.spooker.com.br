@@ -352,11 +352,25 @@ export default function EventCalendar<T>({
       <div className="ec-scroll" ref={scrollRef}>
         <div className="ec-tg-head" style={template}>
           <div />
-          {columns.map((c) => (
-            <div key={c.key} className={`ec-col-head ${sameDay(c.day, now) && view !== 'recursos' ? 'is-today' : ''}`}>
-              {c.header}
-            </div>
-          ))}
+          {columns.map((c) =>
+            view === 'semana' ? (
+              <button
+                key={c.key}
+                type="button"
+                className={`ec-col-head ec-col-head-link ${sameDay(c.day, now) ? 'is-today' : ''}`}
+                onClick={() => {
+                  setDate(c.day)
+                  setView('dia')
+                }}
+              >
+                {c.header}
+              </button>
+            ) : (
+              <div key={c.key} className={`ec-col-head ${sameDay(c.day, now) && view !== 'recursos' ? 'is-today' : ''}`}>
+                {c.header}
+              </div>
+            ),
+          )}
         </div>
 
         <div className="ec-tg-body" style={template}>
